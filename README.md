@@ -1,0 +1,46 @@
+# Ren-chan
+
+The 
+
+## Repository Structure:
+- `bot.py`: entry point of the Discord bot. Does the following:
+    1. imports `global_stuff.py`, which does the following:
+        1. load all the environment variabels from `config.env`
+        1. initialize the Google Sheets interface
+    1. set up the non-slash Discord commands
+    1. set up command error handlers (both slash and non-slash)
+- `/ext/`: Discord bot extensions (each extension is a suite of slash commands and their helper functions)
+    - `Utilities`: various utilities, including recording in-person games, managing club membership, fetching links to player stats on external websites, etc.
+
+## Setting up the bot
+First, `cp config.template.env config.env`.
+### Discord Stuff
+1. set up a bot account on Discord's [developer portal](https://discord.com/developers/applications) (`New Application`).
+    - (SETTINGS -> Bot) Privileged Gateway Intents: `SERVER MEMBERS INTENT` AND `MESSAGE CONTENT INTENT`
+1. invite the bot to the respective servers. You can use the developer portal's OAuth2 URL Generator (SETTINGS -> OAuth2 -> URL Generator):
+    - Scopes: bot
+    - Bot Permissions:
+        * General Permissions: Manage Roles, Read Messages/View Channels
+        * Text Permissions: Send Messages, Create Public Threads, Send Messages in Threads, Manage Messages, Manage Threads, Use External Emojis
+    - [Current Bot Invite URL](https://discord.com/oauth2/authorize?client_id=1264000694369910834&permissions=326686223360&integration_type=0&scope=bot)
+1. fill in the `Discord Stuff` section of [config.env](config.env). The bot token can be obtained through (SETTINGS -> Bot \[-> Reset Token\])
+### Google Sheets Stuff
+1. set up a [Google Cloud project](https://console.cloud.google.com/). [Enable Google Sheets API access](https://console.cloud.google.com/apis/library/sheets.googleapis.com), and "Create Credentials" for a service account (no need to give it access to the project). Generate a JSON key for that service account and save it as `gs_service_account.json` in the [root directory]
+1. make a suitable Google Spreadsheet ([example](https://docs.google.com/spreadsheets/d/1pXlGjyz165S62-3-4ZXxit4Ci0yW8piVfbVObtjg7Is/edit?usp=sharing)) and share the Spreadsheet with that service account.
+1. fill in the `Google Sheets Stuff` section of [config.env](config.env)
+
+## Running the bot
+1. in a Unix shell:
+
+        pipenv install
+        pipenv shell
+        ./start.sh
+1. in the relevant Discord server: run `rh/sync` to sync the slash commands for that server (`rh/` is the regular command prefix).
+
+## Relevant Links (References)
+- [amae-koromo](https://github.com/SAPikachu/amae-koromo) and [amae-koromo-scripts](https://github.com/SAPikachu/amae-koromo-scripts)
+- [Ronnie](https://github.com/RiichiNomi/ronnie)
+- [mjsoul.py](https://github.com/RiichiNomi/mjsoul.py) (eventually we'll add our `mahjongsoul` module into the `mjsoul.py` package)
+- [mahjong_soul_api](https://github.com/MahjongRepository/mahjong_soul_api/)
+
+[root directory]: /
