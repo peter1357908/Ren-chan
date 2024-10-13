@@ -48,7 +48,7 @@ class PlayerScore:
         used for rendering the player score in output
         """
         if self.num_chombo > 0:
-            return f"{self.mention}: {self.raw_score} with {self.num_chombo} chombos"
+            return f"{self.mention}: {self.raw_score} with {self.num_chombo} chombo"
         else:
             return f"{self.mention}: {self.raw_score}"
 
@@ -176,6 +176,9 @@ class Utilities(commands.Cog):
                                  chombo_north: int = 0):
         await interaction.response.defer()
 
+        if chombo_east < 0 or chombo_south < 0 or chombo_west < 0 or chombo_north < 0:
+            return await interaction.followup.send(content=f"Error: negative chombo count.")
+
         if player_north is None:
             if len(set([player_east, player_south, player_west])) != 3:
                 return await interaction.followup.send(content=f"Error: duplicate player entered.")
@@ -190,7 +193,7 @@ class Utilities(commands.Cog):
             if len(set([player_east, player_south, player_west, player_north])) != 4:
                 return await interaction.followup.send(content=f"Error: duplicate player entered.")
             if score_north is None:
-                return await interaction.followup.send(content=f"Error: must enter Player 4's score.")
+                return await interaction.followup.send(content=f"Error: missing Player 4's score.")
             
             expected_total = 4*25000
             player_score_east = PlayerScore(player_east, score_east, chombo_east)
