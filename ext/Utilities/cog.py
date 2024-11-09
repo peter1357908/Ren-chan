@@ -5,14 +5,33 @@ import logging
 from discord.ext import commands
 from discord import app_commands, Interaction
 from typing import *
-from global_stuff import assert_getenv, registry, raw_scores, registry_lock, raw_scores_lock
+from global_stuff import assert_getenv
 
 GUILD_ID: int                 = int(assert_getenv("guild_id"))
 OFFICER_ROLE: str             = assert_getenv("officer_role")
 PAID_MEMBER_ROLE_ID: int      = int(assert_getenv("paid_member_role_id"))
 PAST_PAID_MEMBER_ROLE_ID: int = int(assert_getenv("past_paid_member_role_id"))
-SPREADSHEET_ID: str           = assert_getenv("spreadsheet_url")
+CLUB_LEADERBOARD_URL: str     = assert_getenv("club_leaderboard_url")
+FRIENDLY_LEADERBOARD_URL: str = assert_getenv("friendly_leaderboard_url")
 REGISTRY_NAME_LENGTH: int     = int(assert_getenv("max_name_len"))
+
+# Google Sheets stuff
+import gspread
+import asyncio
+gs_client = gspread.service_account(filename='gs_service_account.json')
+# club leaderboard
+club_leaderboard_ss = gs_client.open_by_url(assert_getenv("club_leaderboard_url"))
+club_leaderboard_registry = club_leaderboard_ss.worksheet("Registry")
+club_leaderboard_raw_scores = club_leaderboard_ss.worksheet("Raw Scores")
+club_leaderboard_registry_lock = asyncio.Lock()
+club_leaderboard_raw_scores_lock = asyncio.Lock()
+# friendly leaderboard
+friendly_leaderboard_ss = gs_client.open_by_url(assert_getenv("friendly_leaderboard_url"))
+friendly_leaderboard_registry = friendly_leaderboard_ss.worksheet("Registry")
+friendly_leaderboard_raw_scores = friendly_leaderboard_ss.worksheet("Raw Scores")
+friendly_leaderboard_registry_lock = asyncio.Lock()
+friendly_leaderboard_raw_scores_lock = asyncio.Lock()
+
 
 def get_discord_name(member: discord.Member) -> str:
     discord_name = member.name
@@ -74,7 +93,7 @@ class Utilities(commands.Cog):
     =====================================================
     """
         
-    async def _register(self, name: str, server_member: discord.Member) -> str:
+    async def _register(self, server_member: discord.Member, name: str, leaderboard_type: str) -> str:
         """
         Add player to the registry, removing any existing registration first.
         Assumes input is already sanitized (e.g., `name` isn't 200 chars long)
@@ -82,6 +101,13 @@ class Utilities(commands.Cog):
         """
         paid_membership = "no"
         discord_name = get_discord_name(server_member)
+
+        if leaderboard_type == "Club Leaderboard":
+            registry = club_leaderboard_registry
+            registry_lock = club_leaderboard_registry_lock
+        else:
+            registry = friendly_leaderboard_registry
+            registry_lock = friendly_leaderboard_registry_lock
 
         async with registry_lock:
             # Delete any existing registration
@@ -100,50 +126,174 @@ class Utilities(commands.Cog):
         
         register_string = "updated registration" if cell_existed else "registered"
         
-        return f"{server_member.mention} {register_string} with name \"{name}\"."
+        return f"{server_member.mention} {register_string} with name \"{name}\" on {leaderboard_type}."
     
-    @app_commands.command(name="register", description="Register with your name, or update your current registration.")
+    @app_commands.command(name="register", description="Register with your name (or update your current registration) on a leaderboard.")
+    @app_commands.choices(leaderboard_type=[
+        app_commands.Choice(name="Club Leaderboard", value="Club Leaderboard"),
+        app_commands.Choice(name="Friendly Leaderboard", value="Friendly Leaderboard")
+    ])
     @app_commands.describe(
-        real_name=f"Your preferred, real-life name (no more than {REGISTRY_NAME_LENGTH} characters)")
-    async def register(self, interaction: Interaction, real_name: str):
+        real_name=f"Your preferred, real-life name (no more than {REGISTRY_NAME_LENGTH} characters)",
+        leaderboard_type="Club Leaderboard (default) or Friendly Leaderboard?")
+    async def register(self, interaction: Interaction,
+                       real_name: str,
+                       leaderboard_type: app_commands.Choice[str] = app_commands.Choice(name="Club Leaderboard", value="Club Leaderboard")):
         if len(real_name) > REGISTRY_NAME_LENGTH:
             await interaction.response.send_message(f"Please keep your preferred name within {REGISTRY_NAME_LENGTH} characters and `/register` again.", ephemeral=True)
             return
 
         await interaction.response.defer()
-        assert isinstance(interaction.user, discord.Member)
         try:
-            response = await self._register(real_name, interaction.user)
+            response = await self._register(interaction.user, real_name, leaderboard_type.value)
             await interaction.followup.send(content=response)
         except Exception as e:
             await interaction.followup.send(content=str(e))
 
-    async def _unregister(self, server_member: discord.Member) -> str:
+    async def _unregister(self, server_member: discord.Member, leaderboard_type: str) -> str:
         discord_name = get_discord_name(server_member)
+
+        if leaderboard_type == "Club Leaderboard":
+            registry = club_leaderboard_registry
+            registry_lock = club_leaderboard_registry_lock
+        else:
+            registry = friendly_leaderboard_registry
+            registry_lock = friendly_leaderboard_registry_lock
+        
         async with registry_lock:
             found_cell: gspread.cell.Cell = registry.find(discord_name, in_column=2)
             if found_cell is None:
-                return f"{server_member.mention} is not a registered member."
+                return f"{server_member.mention} is not a registered member on {leaderboard_type}."
             else:
                 registry.delete_rows(found_cell.row)
-                return f"{server_member.mention}'s registration has been removed."
+                return f"{server_member.mention}'s registration has been removed from {leaderboard_type}."
 
-    @app_commands.command(name="unregister", description="Remove your registered information.")
-    async def unregister(self, interaction: Interaction):
-        assert isinstance(interaction.user, discord.Member)
+    @app_commands.command(name="unregister", description="Remove your registered information from a leaderboard.")
+    @app_commands.choices(leaderboard_type=[
+        app_commands.Choice(name="Club Leaderboard", value="Club Leaderboard"),
+        app_commands.Choice(name="Friendly Leaderboard", value="Friendly Leaderboard")
+    ])
+    @app_commands.describe(leaderboard_type="Club Leaderboard (default) or Friendly Leaderboard?")
+    async def unregister(self, interaction: Interaction,
+                         leaderboard_type: app_commands.Choice[str] = app_commands.Choice(name="Club Leaderboard", value="Club Leaderboard")):
         await interaction.response.defer()
-        response = await self._unregister(interaction.user)
+        response = await self._unregister(interaction.user, leaderboard_type.value)
         await interaction.followup.send(content=response)
 
-    @app_commands.command(name="unregister_other", description=f"Unregister the given server member. Only usable by @{OFFICER_ROLE}.")
-    @app_commands.describe(server_member="The server member you want to unregister.")
+    @app_commands.command(name="unregister_other", description=f"Unregister the given server member from a leaderboard. Only usable by @{OFFICER_ROLE}.")
+    @app_commands.choices(leaderboard_type=[
+        app_commands.Choice(name="Club Leaderboard", value="Club Leaderboard"),
+        app_commands.Choice(name="Friendly Leaderboard", value="Friendly Leaderboard")
+    ])
+    @app_commands.describe(server_member="The server member you want to unregister.",
+                           leaderboard_type="Club Leaderboard (default) or Friendly Leaderboard?")
     @app_commands.checks.has_role(OFFICER_ROLE)
-    async def unregister_other(self, interaction: Interaction, server_member: discord.Member):
+    async def unregister_other(self, interaction: Interaction,
+                               server_member: discord.Member,
+                               leaderboard_type: app_commands.Choice[str] = app_commands.Choice(name="Club Leaderboard", value="Club Leaderboard")):
         await interaction.response.defer()
-        response = await self._unregister(server_member)
+        response = await self._unregister(server_member, leaderboard_type.value)
         await interaction.followup.send(content=response)
 
-    @app_commands.command(name="enter_scores", description=f"Enter scores for an IRL game, starting with the East player. Only usable by @{OFFICER_ROLE}.")
+    async def _enter_score(self,
+                           leaderboard_type: str,
+                           game_type: app_commands.Choice[str],
+                           player_east: discord.Member, score_east: int,
+                           player_south: discord.Member, score_south: int,
+                           player_west: discord.Member, score_west: int,
+                           player_north: Optional[discord.Member] = None, score_north: Optional[int] = None,
+                           leftover_points: int = 0,
+                           chombo_east: int = 0,
+                           chombo_south: int = 0,
+                           chombo_west: int = 0,
+                           chombo_north: int = 0) -> str:
+        # INPUT CHECKING LOGIC
+        # =======================
+        if chombo_east < 0 or chombo_south < 0 or chombo_west < 0 or chombo_north < 0:
+            return "Error: negative chombo count."
+
+        if player_north is None:
+            if len(set([player_east, player_south, player_west])) != 3:
+                return "Error: duplicate player entered."
+            
+            expected_total = 3*35000
+            player_score_east = PlayerScore(player_east, score_east, chombo_east)
+            player_score_south = PlayerScore(player_south, score_south, chombo_south)
+            player_score_west = PlayerScore(player_west, score_west, chombo_west)
+            player_scores = [player_score_east, player_score_south, player_score_west]
+            game_style = "Sanma"
+        else:
+            if len(set([player_east, player_south, player_west, player_north])) != 4:
+                return "Error: duplicate player entered."
+            if score_north is None:
+                return "Error: missing Player 4's score."
+            
+            expected_total = 4*25000
+            player_score_east = PlayerScore(player_east, score_east, chombo_east)
+            player_score_south = PlayerScore(player_south, score_south, chombo_south)
+            player_score_west = PlayerScore(player_west, score_west, chombo_west)
+            player_score_north = PlayerScore(player_north, score_north, chombo_north)
+            player_scores = [player_score_east, player_score_south, player_score_west, player_score_north]
+            game_style = "Yonma"
+        
+        # TODO: make more elegant!!
+        total_score = score_east + score_south + score_west + leftover_points
+        if game_style == "Yonma":
+            total_score += score_north
+        gamemode = f"{game_style} {game_type.value}"
+
+        if total_score != expected_total:
+            return await f"Error: Entered scores sum up to be {total_score}.\nExpected {expected_total} for {gamemode}."
+
+        # OUTPUT CONSTRUCTION LOGIC
+        # =======================
+        ordered_players = sorted(player_scores, reverse=True)
+
+        timestamp = str(datetime.datetime.now()).split(".")[0]
+        if game_style == "Yonma":
+            row = [timestamp, gamemode, "yes",
+                ordered_players[0].discord_name, ordered_players[0].raw_score,
+                ordered_players[1].discord_name, ordered_players[1].raw_score,
+                ordered_players[2].discord_name, ordered_players[2].raw_score,
+                ordered_players[3].discord_name, ordered_players[3].raw_score,
+                leftover_points,
+                ordered_players[0].num_chombo,
+                ordered_players[1].num_chombo,
+                ordered_players[2].num_chombo,
+                ordered_players[3].num_chombo]
+        else:
+            row = [timestamp, gamemode, "yes",
+                ordered_players[0].discord_name, ordered_players[0].raw_score,
+                ordered_players[1].discord_name, ordered_players[1].raw_score,
+                ordered_players[2].discord_name, ordered_players[2].raw_score,
+                "", "",
+                leftover_points,
+                ordered_players[0].num_chombo,
+                ordered_players[1].num_chombo,
+                ordered_players[2].num_chombo,
+                ""]
+        
+        # enter the scores into the sheet
+        if leaderboard_type == "Club Leaderboard":
+            raw_scores = club_leaderboard_raw_scores
+            raw_scores_lock = club_leaderboard_raw_scores_lock
+        else:
+            raw_scores = friendly_leaderboard_raw_scores
+            raw_scores_lock = friendly_leaderboard_raw_scores_lock
+
+        async with raw_scores_lock:
+            raw_scores.append_row(row)
+
+        score_printout = f"Successfully entered scores for a {gamemode} game onto {leaderboard_type}:\n" \
+                            f"- **1st**: {ordered_players[0]}\n" \
+                            f"- **2nd**: {ordered_players[1]}\n" \
+                            f"- **3rd**: {ordered_players[2]}"
+        if game_style == "Yonma":
+            score_printout += f"\n- **4th**: {ordered_players[3]}"
+
+        return score_printout
+
+    @app_commands.command(name="enter_scores_club", description=f"Enter scores for an IRL club game, starting with the East player. Only usable by @{OFFICER_ROLE}.")
     @app_commands.describe(game_type="Hanchan or tonpuu?",
                            player_east="The East player you want to record the score for.",
                            score_east="Score for East player.",
@@ -174,82 +324,75 @@ class Utilities(commands.Cog):
                                  chombo_south: int = 0,
                                  chombo_west: int = 0,
                                  chombo_north: int = 0):
+
         await interaction.response.defer()
 
-        if chombo_east < 0 or chombo_south < 0 or chombo_west < 0 or chombo_north < 0:
-            return await interaction.followup.send(content=f"Error: negative chombo count.")
+        response = self._enter_score(
+            leaderboard_type="Club Leaderboard",
+            game_type=game_type,
+            player_east=player_east, score_east=score_east,
+            player_south=player_south, score_south=score_south,
+            player_west=player_west, score_west=score_west,
+            player_north=player_north, score_north=score_north,
+            leftover_points=leftover_points,
+            chombo_east=chombo_east,
+            chombo_south=chombo_south,
+            chombo_west=chombo_west,
+            chombo_north=chombo_north
+        )
 
-        if player_north is None:
-            if len(set([player_east, player_south, player_west])) != 3:
-                return await interaction.followup.send(content=f"Error: duplicate player entered.")
-            
-            expected_total = 3*35000
-            player_score_east = PlayerScore(player_east, score_east, chombo_east)
-            player_score_south = PlayerScore(player_south, score_south, chombo_south)
-            player_score_west = PlayerScore(player_west, score_west, chombo_west)
-            player_scores = [player_score_east, player_score_south, player_score_west]
-            game_style = "Sanma"
-        else:
-            if len(set([player_east, player_south, player_west, player_north])) != 4:
-                return await interaction.followup.send(content=f"Error: duplicate player entered.")
-            if score_north is None:
-                return await interaction.followup.send(content=f"Error: missing Player 4's score.")
-            
-            expected_total = 4*25000
-            player_score_east = PlayerScore(player_east, score_east, chombo_east)
-            player_score_south = PlayerScore(player_south, score_south, chombo_south)
-            player_score_west = PlayerScore(player_west, score_west, chombo_west)
-            player_score_north = PlayerScore(player_north, score_north, chombo_north)
-            player_scores = [player_score_east, player_score_south, player_score_west, player_score_north]
-            game_style = "Yonma"
+        await interaction.followup.send(content=response)
+
+    @app_commands.command(name="enter_scores_friendly", description=f"Enter scores for an IRL friendly game, starting with the East player.")
+    @app_commands.describe(game_type="Hanchan or tonpuu?",
+                           player_east="The East player you want to record the score for.",
+                           score_east="Score for East player.",
+                           player_south="The South player you want to record the score for.",
+                           score_south="Score for South player.",
+                           player_west="The West player you want to record the score for.",
+                           score_west="Score for West player.",
+                           player_north="The North player (if Yonma) you want to record the score for.",
+                           score_north="Score for North player (if Yonma).",
+                           leftover_points="(optional) Leftover points (e.g., leftover riichi sticks).",
+                           chombo_east="The number of chombo East player committed",
+                           chombo_south="The number of chombo South player committed",
+                           chombo_west="The number of chombo West player committed",
+                           chombo_north="The number of chombo North player committed")
+    @app_commands.choices(game_type=[
+        app_commands.Choice(name="Hanchan", value="Hanchan"),
+        app_commands.Choice(name="Tonpuu", value="Tonpuu")
+    ])
+    async def enter_scores(self, interaction: Interaction,
+                                 game_type: app_commands.Choice[str],
+                                 player_east: discord.Member, score_east: int,
+                                 player_south: discord.Member, score_south: int,
+                                 player_west: discord.Member, score_west: int,
+                                 player_north: Optional[discord.Member] = None, score_north: Optional[int] = None,
+                                 leftover_points: int = 0,
+                                 chombo_east: int = 0,
+                                 chombo_south: int = 0,
+                                 chombo_west: int = 0,
+                                 chombo_north: int = 0):
+
+        await interaction.response.defer()
+
+        response = self._enter_score(
+            leaderboard_type="Friendly Leaderboard",
+            game_type=game_type,
+            player_east=player_east, score_east=score_east,
+            player_south=player_south, score_south=score_south,
+            player_west=player_west, score_west=score_west,
+            player_north=player_north, score_north=score_north,
+            leftover_points=leftover_points,
+            chombo_east=chombo_east,
+            chombo_south=chombo_south,
+            chombo_west=chombo_west,
+            chombo_north=chombo_north
+        )
+
+        await interaction.followup.send(content=response)
+
         
-        # TODO: make more elegant!!
-        total_score = score_east + score_south + score_west + leftover_points
-        if game_style == "Yonma":
-            total_score += score_north
-        gamemode = f"{game_style} {game_type.value}"
-
-        if total_score != expected_total:
-            return await interaction.followup.send(content=f"Error: Entered scores sum up to be {total_score}.\nExpected {expected_total} for {gamemode}.")
-
-        # the input is now sanitized; order the players by their scores (first -> last)
-        ordered_players = sorted(player_scores, reverse=True)
-
-        # enter the scores into the sheet
-        timestamp = str(datetime.datetime.now()).split(".")[0]
-        async with raw_scores_lock:
-            if game_style == "Yonma":
-                row = [timestamp, gamemode, "yes",
-                    ordered_players[0].discord_name, ordered_players[0].raw_score,
-                    ordered_players[1].discord_name, ordered_players[1].raw_score,
-                    ordered_players[2].discord_name, ordered_players[2].raw_score,
-                    ordered_players[3].discord_name, ordered_players[3].raw_score,
-                    leftover_points,
-                    ordered_players[0].num_chombo,
-                    ordered_players[1].num_chombo,
-                    ordered_players[2].num_chombo,
-                    ordered_players[3].num_chombo]
-            else:
-                row = [timestamp, gamemode, "yes",
-                    ordered_players[0].discord_name, ordered_players[0].raw_score,
-                    ordered_players[1].discord_name, ordered_players[1].raw_score,
-                    ordered_players[2].discord_name, ordered_players[2].raw_score,
-                    "", "",
-                    leftover_points,
-                    ordered_players[0].num_chombo,
-                    ordered_players[1].num_chombo,
-                    ordered_players[2].num_chombo,
-                    ""]
-            raw_scores.append_row(row)
-
-        score_printout = f"Successfully entered scores for a {gamemode} game:\n" \
-                            f"- **1st**: {ordered_players[0]}\n" \
-                            f"- **2nd**: {ordered_players[1]}\n" \
-                            f"- **3rd**: {ordered_players[2]}"
-        if game_style == "Yonma":
-            score_printout += f"\n- **4th**: {ordered_players[3]}"
-
-        await interaction.followup.send(content=score_printout)
 
 async def setup(bot: commands.Bot):
     logging.info(f"Loading cog `{Utilities.__name__}`...")
