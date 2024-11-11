@@ -289,7 +289,7 @@ class Utilities(commands.Cog):
         gamemode = f"{game_style} {game_type}"
 
         if total_score != expected_total:
-            return await f"Error: Entered scores sum up to be {total_score}.\nExpected {expected_total} for {gamemode}."
+            return f"Error: Entered scores sum up to be {total_score}.\nExpected {expected_total} for {gamemode}."
 
         # OUTPUT CONSTRUCTION LOGIC
         # =======================
