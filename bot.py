@@ -125,7 +125,7 @@ async def on_app_command_error(interaction: Interaction, error: app_commands.App
             await interaction.response.send_message(error_message)
         # do NOT `raise error` here; this somehow results in the error being
         # sent here again (TOTHINK: but only once! Intriguing...)
-        print(''.join(traceback.format_exception(error))) # show the error to the console for debugging
+        logging.info(''.join(traceback.format_exception(error))) # show the error to the console for debugging
     else:
         raise error
 bot.tree.on_error = on_app_command_error

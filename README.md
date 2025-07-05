@@ -21,7 +21,7 @@ First, `cp config.template.env config.env`.
 1. invite the bot to the respective servers. You can use the developer portal's OAuth2 URL Generator (SETTINGS -> OAuth2 -> URL Generator):
     - Scopes: bot
     - Bot Permissions:
-        * General Permissions: Manage Roles, Read Messages/View Channels
+        * General Permissions: Manage Roles, View Channels, Manage Events
         * Text Permissions: Send Messages, Create Public Threads, Send Messages in Threads, Manage Messages, Manage Threads, Use External Emojis
     - [Current Bot Invite URL](https://discord.com/oauth2/authorize?client_id=1264000694369910834&permissions=326686223360&integration_type=0&scope=bot)
 1. fill in the `Discord Stuff` section of [config.env](config.env). The bot token can be obtained through (SETTINGS -> Bot \[-> Reset Token\])
