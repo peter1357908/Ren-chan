@@ -9,8 +9,9 @@ from global_stuff import assert_getenv
 
 GUILD_ID: int                 = int(assert_getenv("guild_id"))
 OFFICER_ROLE: str             = assert_getenv("officer_role")
-PAID_MEMBER_ROLE_ID: int      = int(assert_getenv("paid_member_role_id"))
-PAST_PAID_MEMBER_ROLE_ID: int = int(assert_getenv("past_paid_member_role_id"))
+ELDER_ROLE: str               = assert_getenv("elder_role")
+# PAID_MEMBER_ROLE_ID: int      = int(assert_getenv("paid_member_role_id"))
+# PAST_PAID_MEMBER_ROLE_ID: int = int(assert_getenv("past_paid_member_role_id"))
 CLUB_LEADERBOARD_URL: str     = assert_getenv("club_leaderboard_url")
 FRIENDLY_LEADERBOARD_URL: str = assert_getenv("friendly_leaderboard_url")
 REGISTRY_NAME_LENGTH: int     = int(assert_getenv("max_name_len"))
@@ -339,7 +340,7 @@ class Utilities(commands.Cog):
 
         return score_printout
 
-    @app_commands.command(name="enter_scores_club", description=f"Enter scores for an IRL club game, starting with the East player. Only usable by @{OFFICER_ROLE}.")
+    @app_commands.command(name="enter_scores_club", description=f"Enter scores for an IRL club game, starting with the East player. Only usable by @{OFFICER_ROLE} and @{ELDER_ROLE}.")
     @app_commands.describe(game_type="Hanchan or tonpuu?",
                            player_east="The East player you want to record the score for.",
                            score_east="Score for East player.",
@@ -354,7 +355,7 @@ class Utilities(commands.Cog):
                            chombo_south="The number of chombo South player committed",
                            chombo_west="The number of chombo West player committed",
                            chombo_north="The number of chombo North player committed")
-    @app_commands.checks.has_role(OFFICER_ROLE)
+    @app_commands.checks.has_any_role(OFFICER_ROLE, ELDER_ROLE)
     async def enter_scores_club(self, interaction: Interaction,
                                  game_type: Literal["Hanchan", "Tonpuu"],
                                  player_east: discord.Member, score_east: int,
