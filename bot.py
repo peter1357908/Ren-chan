@@ -110,8 +110,10 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
 # https://stackoverflow.com/a/75815621/21452015
 # also see here: https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.Cog.cog_app_command_error
 async def on_app_command_error(interaction: Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.errors.MissingRole) or isinstance(error, app_commands.errors.MissingAnyRole):
+    if isinstance(error, app_commands.errors.MissingRole):
         await interaction.response.send_message(f"You do not have the required role ({error.missing_role}) to use this command.", ephemeral=True)
+    elif isinstance(error, app_commands.errors.MissingAnyRole):
+        await interaction.response.send_message(f"You do not have any of the required roles ({error.missing_roles}) to use this command.", ephemeral=True)
     elif isinstance(error, app_commands.errors.CommandInvokeError):
         # here it's especially important so the bot isn't stuck "thinking" (e.g., from `defer()`)
         # meanwhile, the user also gets an idea of what they might have done wrong.
