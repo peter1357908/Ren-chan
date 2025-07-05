@@ -2,63 +2,54 @@ import asyncio
 import datetime
 import discord
 import logging
-import zoneinfo
 from discord.ext import commands, tasks
 from typing import *
+from same_day_event import SameDayEvent
 
 from global_stuff import assert_getenv
 
-GUILD_ID: int                    = int(assert_getenv("guild_id"))
+GUILD_ID = int(assert_getenv("guild_id"))
 
-SATURDAY_EVENT_NAME: str         = "Saturday Afternoon Riichi"
-STARTING_SATURDAY: datetime.date = datetime.date(year=2025, month=7, day=12)
-SATURDAY_EVENT_FREQUENCY: int    = 28  # unit: days
-
-def get_next_Saturday_event_date() -> datetime.date:
-    today = datetime.date.today()
-    if today < STARTING_SATURDAY:
-        return STARTING_SATURDAY
-    
-    days_since_start = (today - STARTING_SATURDAY).days
-    days_since_last_event = days_since_start % SATURDAY_EVENT_FREQUENCY
-
-    return today + datetime.timedelta(days=SATURDAY_EVENT_FREQUENCY - days_since_last_event)
-    
+events = [
+    SameDayEvent(
+        starting_date=datetime.date(year=2025, month=7, day=12),
+        frequency=28,
+        name="Saturday Afternoon Riichi",
+        description="This is our 4-weekly Saturday meetup! No experience required -- we'll be happy to teach!",
+        start_time=datetime.time(hour=13),
+        end_time=datetime.time(hour=18),
+        location="Element Eatery (5350 Medpace Way, Cincinnati, OH 45227)"
+    ),
+    SameDayEvent(
+        starting_date=datetime.date(year=2025, month=7, day=6),
+        frequency=14,
+        name="Sunday Afternoon Riichi",
+        description="This is our biweekly Sunday meetup! No experience required -- we'll be happy to teach!",
+        start_time=datetime.time(hour=13),
+        end_time=datetime.time(hour=18),
+        location="Element Eatery (5350 Medpace Way, Cincinnati, OH 45227)"
+    )
+]
 
 class EventPoster(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot, events: List[SameDayEvent]):
         self.bot = bot
-        self.timezone = zoneinfo.ZoneInfo("America/New_York")
+        self.events = events
         self.guild: discord.Guild = None # bot.get_guild(GUILD_ID) doesn't work; needs to be fetched via API
-
-    async def post_saturday_event(self):
-        next_event_date = get_next_Saturday_event_date()
-
-        one_pm = datetime.time(hour=13)
-        six_pm = datetime.time(hour=18)
-        await self.guild.create_scheduled_event(
-            name = SATURDAY_EVENT_NAME,
-            description = "This is our 4-weekly Saturday meetup!",
-            start_time = datetime.datetime.combine(date=next_event_date, time=one_pm, tzinfo=self.timezone),
-            end_time = datetime.datetime.combine(date=next_event_date, time=six_pm, tzinfo=self.timezone),
-            entity_type = discord.EntityType.external,
-            privacy_level = discord.PrivacyLevel.guild_only,
-            location = "Element Eatery (5350 Medpace Way, Cincinnati, OH 45227)")
 
     @tasks.loop(hours=24, reconnect=True)
     async def try_post_events(self):
-        logging.info("Checking if Saturday event already exists...")
+        logging.info("Checking if any event needs to be posted...")
         
         curr_events = await self.guild.fetch_scheduled_events()
-        saturday_event_exists = False
-        for event in curr_events:
-            if event.name == SATURDAY_EVENT_NAME:
-                saturday_event_exists = True
-                break
+        curr_event_names = {e.name for e in curr_events}
 
-        if not saturday_event_exists:
-            logging.info("No existing Saturday event. Posting saturday event!")
-            await self.post_saturday_event()
+        for e in self.events:
+            if e.name in curr_event_names:
+                continue
+
+            logging.info(f"Posting event \"{e.name}\".")
+            asyncio.create_task(e.post_next_event())
 
     async def async_setup(self):
         self.guild = await self.bot.fetch_guild(GUILD_ID)
@@ -75,6 +66,6 @@ class EventPoster(commands.Cog):
 
 async def setup(bot: commands.Bot):
     logging.info(f"Loading cog `{EventPoster.__name__}`...")
-    instance = EventPoster(bot)
+    instance = EventPoster(bot, events)
     asyncio.create_task(instance.async_setup())
     await bot.add_cog(instance, guild=discord.Object(id=GUILD_ID))
