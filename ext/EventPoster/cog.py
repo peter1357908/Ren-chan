@@ -41,6 +41,8 @@ class EventPoster(commands.Cog):
             description = "This is our 4-weekly Saturday meetup!",
             start_time = datetime.datetime.combine(date=next_event_date, time=one_pm, tzinfo=self.timezone),
             end_time = datetime.datetime.combine(date=next_event_date, time=six_pm, tzinfo=self.timezone),
+            entity_type = discord.EntityType.external,
+            privacy_level = discord.PrivacyLevel.guild_only,
             location = "Element Eatery (5350 Medpace Way, Cincinnati, OH 45227)")
 
     @tasks.loop(hours=24, reconnect=True)
