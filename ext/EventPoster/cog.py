@@ -29,7 +29,7 @@ class EventPoster(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.timezone = zoneinfo.ZoneInfo("America/New_York")
-        self.guild = bot.get_guild(GUILD_ID)
+        self.guild: discord.Guild = None # bot.get_guild(GUILD_ID) doesn't work; needs to be fetched via API
 
     async def post_saturday_event(self):
         next_event_date = get_next_Saturday_event_date()
@@ -59,6 +59,7 @@ class EventPoster(commands.Cog):
             await self.post_saturday_event()
 
     async def async_setup(self):
+        self.guild = await self.bot.fetch_guild(GUILD_ID)
         self.try_post_events.start()
 
     # ensure bot is ready before try_post_events is called
