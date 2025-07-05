@@ -340,7 +340,7 @@ class Utilities(commands.Cog):
 
         return score_printout
 
-    @app_commands.command(name="enter_scores_club", description=f"Enter scores for an IRL club game, starting with the East player. Only usable by @{OFFICER_ROLE} and @{ELDER_ROLE}.")
+    @app_commands.command(name="enter_scores_club", description=f"Enter scores for a club game. Only usable by @{OFFICER_ROLE} and @{ELDER_ROLE}.")
     @app_commands.describe(game_type="Hanchan or tonpuu?",
                            player_east="The East player you want to record the score for.",
                            score_east="Score for East player.",
