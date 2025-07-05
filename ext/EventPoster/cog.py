@@ -4,7 +4,7 @@ import discord
 import logging
 from discord.ext import commands, tasks
 from typing import *
-from same_day_event import SameDayEvent
+from .same_day_event import SameDayEvent
 
 from global_stuff import assert_getenv
 
