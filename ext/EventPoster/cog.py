@@ -49,7 +49,7 @@ class EventPoster(commands.Cog):
                 continue
 
             logging.info(f"Posting event \"{e.name}\".")
-            asyncio.create_task(e.post_next_event())
+            asyncio.create_task(e.post_next_event(self.guild))
 
     async def async_setup(self):
         self.guild = await self.bot.fetch_guild(GUILD_ID)
