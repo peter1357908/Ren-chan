@@ -4,35 +4,41 @@ import discord
 import logging
 from discord.ext import commands, tasks
 from typing import *
-from .same_day_event import SameDayEvent
+from .same_day_event import RecurringSameDayEvent
 
 from global_stuff import assert_getenv
 
 GUILD_ID = int(assert_getenv("guild_id"))
 
+tournament_dates = {
+    datetime.date(2025, 9, 6)  # QCR local tournament 2025
+}
+
 events = [
-    SameDayEvent(
+    RecurringSameDayEvent(
         starting_date=datetime.date(year=2025, month=7, day=12),
         frequency=28,
         name="Saturday Afternoon Riichi",
         description="This is our 4-weekly Saturday meetup! No experience required -- we'll be happy to teach!",
         start_time=datetime.time(hour=13),
         end_time=datetime.time(hour=18),
-        location="Element Eatery (5350 Medpace Way, Cincinnati, OH 45227)"
+        location="Element Eatery (5350 Medpace Way, Cincinnati, OH 45227)",
+        excluded_dates=tournament_dates
     ),
-    SameDayEvent(
+    RecurringSameDayEvent(
         starting_date=datetime.date(year=2025, month=7, day=6),
         frequency=14,
         name="Sunday Afternoon Riichi",
         description="This is our biweekly Sunday meetup! No experience required -- we'll be happy to teach!",
         start_time=datetime.time(hour=13),
         end_time=datetime.time(hour=18),
-        location="Element Eatery (5350 Medpace Way, Cincinnati, OH 45227)"
+        location="Element Eatery (5350 Medpace Way, Cincinnati, OH 45227)",
+        excluded_dates=tournament_dates
     )
 ]
 
 class EventPoster(commands.Cog):
-    def __init__(self, bot: commands.Bot, events: List[SameDayEvent]):
+    def __init__(self, bot: commands.Bot, events: List[RecurringSameDayEvent]):
         self.bot = bot
         self.events = events
         self.guild: discord.Guild = None # bot.get_guild(GUILD_ID) doesn't work; needs to be fetched via API

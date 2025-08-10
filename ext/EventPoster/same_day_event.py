@@ -2,10 +2,11 @@
 import datetime
 import zoneinfo
 import discord
+from typing import Optional, Set
 
 TIMEZONE = zoneinfo.ZoneInfo("America/New_York")
 
-class SameDayEvent():
+class RecurringSameDayEvent():
     def __init__(self,
         starting_date: datetime.date,
         frequency: int,
@@ -13,7 +14,8 @@ class SameDayEvent():
         description: str,
         start_time: datetime.time,
         end_time: datetime.time,
-        location: str):
+        location: str,
+        excluded_dates: Optional[Set[datetime.date]] = None):
         self.starting_date = starting_date
         self.frequency = frequency
         self.name = name
@@ -21,6 +23,7 @@ class SameDayEvent():
         self.start_time = start_time
         self.end_time = end_time
         self.location = location
+        self.excluded_dates = excluded_dates
     
     @staticmethod
     def get_next_event_date(starting_date: datetime.date, frequency: int) -> datetime.date:
@@ -39,14 +42,17 @@ class SameDayEvent():
         days_since_start = (today - starting_date).days
         days_since_last_event = days_since_start % frequency
 
-        return today + datetime.timedelta(days=frequency - days_since_last_event)
+        return today + datetime.timedelta(days=(frequency - days_since_last_event))
     
     async def post_next_event(self, guild: discord.Guild):
         """
-        Post same-day events
+        Post the next event unless its date is excluded
         """
         
-        next_event_date = SameDayEvent.get_next_event_date(self.starting_date, self.frequency)
+        next_event_date = RecurringSameDayEvent.get_next_event_date(self.starting_date, self.frequency)
+        
+        if self.excluded_dates is not None and next_event_date in self.excluded_dates:
+            return
 
         await guild.create_scheduled_event(
             name = self.name,
