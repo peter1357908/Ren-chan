@@ -7,6 +7,5 @@ name = "pypi"
 python-dotenv = "*"
 discord-py = "*"
 gspread = "*"
-flask = "*"
 
 [dev-packages]
