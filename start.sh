@@ -1,6 +1,8 @@
 #!/bin/bash
 PID_FILE="./app.pid"
-exec > ./logs/start.log 2>&1
+# print to both stdout and to a file. Matters for GitHub Actions and for printing to
+# the python log when run with `subprocess.Popen(["./start.sh"])`
+exec > >(tee ./logs/start.log) 2>&1
 
 # kill the bot if it's currently running
 if [ -f "$PID_FILE" ]; then
@@ -14,9 +16,8 @@ if [ -f "$PID_FILE" ]; then
     fi
 fi
 
-# we expect nothing written to stdout or stderr, but we track them just in case.
-# somehow the python process persists after exiting shell, without `nohup` or `disown`...
-# I need to figure out why.
+# app loggings should be in `app.log`. Here `python.log` should only capture
+# the tee'd stdout from running `subprocess.Popen(["./start.sh"])`, etc.
 pipenv run python3 bot.py > ./logs/python.log 2>&1 &
 NEW_PID=$!
 
