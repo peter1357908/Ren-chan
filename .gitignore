@@ -1,19 +1,9 @@
 # secrets
 config.env
 gs_service_account.json
-injustice_servers.json
-slash_commands_servers.json
 
 # generated local files
 Pipfile.lock
 **/__pycache__
-log.txt
-cached_games/*
-
-# may result from installing protobuf-cli with npm
-**/package.json
-**/package-lock.json
-**/node_modules
-
-# cache
-cached_results/*
+app.pid
+app.log*

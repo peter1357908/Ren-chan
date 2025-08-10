@@ -1,4 +1,5 @@
 # note that `global_stuff` loads the `config.env` variables
+import logging.handlers
 from global_stuff import assert_getenv
 
 from os import execl
@@ -15,7 +16,11 @@ logging.basicConfig(
     format='%(asctime)s %(levelname)s %(name)s: %(message)s',
     datefmt='%m-%d %H:%M:%S',
     handlers=[
-        logging.FileHandler("log.txt"),
+        logging.handlers.RotatingFileHandler(
+            "app.log",
+            maxBytes=5_000_000,
+            backupCount=1
+        ),
         logging.StreamHandler()
     ]
 )
