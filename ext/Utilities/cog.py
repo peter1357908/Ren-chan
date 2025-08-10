@@ -77,7 +77,7 @@ class PlayerScore:
 
 class Utilities(commands.Cog):
     """
-    Utility commands specific to Longhorn Riichi
+    Utility commands for club management
     """
     def __init__(self, bot: commands.Bot):
         self.bot = bot

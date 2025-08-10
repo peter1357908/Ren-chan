@@ -40,7 +40,7 @@ First, `cp config.template.env config.env`.
 1. fill in the `Google Sheets Stuff` section of [config.env](config.env)
 ### OPTIONAL: Continuous Deployment
 This repo does contain a GitHub Actions workflow that automates deployment to a server via SSH. To enable this, follow these steps:
-1. ensure that you have cloned the repo into `~/Ren-chan` ([`deploy.yml`](./.github/workflows/deploy.yml) assumes this)
+1. ensure that you have the repo at `~/Ren-chan` ([`deploy.yml`](./.github/workflows/deploy.yml) assumes this) and you have set up `config.env` per previous steps.
 1. generate your SSH key pair. Note that you should replace the `username` part with the target username on the server.
 ```bash
 ssh-keygen -t ed25519 -C "username" -f ~/.ssh/github_deploy_key
