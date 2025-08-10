@@ -3,7 +3,6 @@ config.env
 gs_service_account.json
 
 # generated local files
-Pipfile.lock
 **/__pycache__
 app.pid
 app.log*
