@@ -20,8 +20,7 @@ logging.basicConfig(
             "app.log",
             maxBytes=5_000_000,
             backupCount=1
-        ),
-        logging.StreamHandler()
+        )
     ]
 )
 
