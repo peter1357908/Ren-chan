@@ -1,6 +1,6 @@
 #!/bin/bash
 PID_FILE="./app.pid"
-exec >./logs/start.log 2>&1
+exec > ./logs/start.log 2>&1
 
 # kill the bot if it's currently running
 if [ -f "$PID_FILE" ]; then
@@ -14,8 +14,8 @@ if [ -f "$PID_FILE" ]; then
     fi
 fi
 
-# we expect no stdout or stderr; any logging should be handled by the app explicitly
-pipenv run python3 bot.py &
+# we expect nothing written to stdout or stderr, but we track them just in case
+pipenv run python3 bot.py > ./logs/python.log 2>&1 &
 NEW_PID=$!
 
 echo $NEW_PID > "$PID_FILE"
