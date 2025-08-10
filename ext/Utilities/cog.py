@@ -10,8 +10,6 @@ from global_stuff import assert_getenv
 GUILD_ID: int                 = int(assert_getenv("guild_id"))
 OFFICER_ROLE: str             = assert_getenv("officer_role")
 ELDER_ROLE: str               = assert_getenv("elder_role")
-# PAID_MEMBER_ROLE_ID: int      = int(assert_getenv("paid_member_role_id"))
-# PAST_PAID_MEMBER_ROLE_ID: int = int(assert_getenv("past_paid_member_role_id"))
 CLUB_LEADERBOARD_URL: str     = assert_getenv("club_leaderboard_url")
 FRIENDLY_LEADERBOARD_URL: str = assert_getenv("friendly_leaderboard_url")
 REGISTRY_NAME_LENGTH: int     = int(assert_getenv("max_name_len"))
