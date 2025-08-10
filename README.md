@@ -10,13 +10,14 @@ Ren-chan is a Discord bot for riichi club management, using Google Sheets for da
         1. load all the environment variabels from `config.env`
     1. set up the non-slash Discord commands
     1. set up command error handlers (both slash and non-slash)
-- `start.sh` and `deploy.sh`: entry points of the bot as a Python application. See [Running the bot](#running-the-bot).
-    - `start.sh` runs the bot in the background and tracks its PID. Normally, you shouldn't run this directly from the terminal -- run `deploy.sh` instead.
+- `start.sh` and `deploy.sh`: entry points of the bot as a Python application.
+    - `start.sh`:
+        1. if the bot is currently running, kill it (based on the presence of `app.pid` file)
+        1. runs the bot under `pipenv` in the background and tracks its PID in `app.pid`.
     - `deploy.sh`:
         1. pulls from remote
         1. installs latest depdendencies according to `Pipfile.lock`
-        1. kills the old instance of the bot if it was running
-        1. calls `start.sh` inside the `pipenv`.
+        1. calls `start.sh`.
 - `/ext/`: Discord bot extensions (each extension is a suite of slash commands and their helper functions)
     - `Utilities`: various utilities, including recording in-person games, managing club membership, etc.
 
@@ -39,7 +40,8 @@ First, `cp config.template.env config.env`.
 1. fill in the `Google Sheets Stuff` section of [config.env](config.env)
 
 ## Running the bot
-1. Simply run `./deploy.sh`. The bot's PID will be tracked in `app.pid`, so the bot can be killed manually or in the next run of `./deploy.sh`.
+1. ensure you complete all steps in [the setup](#setting-up-the-bot).
+1. run `./deploy.sh` (see [repo structure](#repository-structure) for details).
 1. in the relevant Discord server: run `rc/sync` to sync the slash commands for that server (`rc/` is the regular command prefix).
 
 ## Relevant Links (References)

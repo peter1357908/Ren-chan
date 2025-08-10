@@ -5,4 +5,4 @@ gs_service_account.json
 # generated local files
 **/__pycache__
 app.pid
-app.log*
+logs/*

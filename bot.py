@@ -1,7 +1,7 @@
 # note that `global_stuff` loads the `config.env` variables and configures logging
 from global_stuff import assert_getenv
 
-from os import execl
+import subprocess
 import discord
 from discord import app_commands, Interaction
 from discord.ext import commands
@@ -57,13 +57,13 @@ async def shutdown(ctx: commands.Context):
 @commands.is_owner()
 async def restart(ctx: commands.Context): 
     await ctx.send("Restarting... (start.sh)")
-    execl("./start.sh", "./start.sh")
+    subprocess.Popen(["./start.sh"])
 
 @bot.command(name='redeploy', hidden=True)
 @commands.is_owner()
 async def restart(ctx: commands.Context): 
     await ctx.send("Redeploying... (deploy.sh)")
-    execl("./deploy.sh", "./deploy.sh")
+    subprocess.Popen(["./deploy.sh"])
 
 @bot.command(name='load', hidden=True)
 @commands.is_owner()

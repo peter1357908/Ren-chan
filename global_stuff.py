@@ -12,7 +12,7 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S',
     handlers=[
         logging.handlers.RotatingFileHandler(
-            "app.log",
+            "./logs/app.log",
             maxBytes=5_000_000,
             backupCount=1
         )
