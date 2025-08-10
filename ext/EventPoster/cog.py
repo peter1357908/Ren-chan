@@ -54,7 +54,6 @@ class EventPoster(commands.Cog):
             if e.name in curr_event_names:
                 continue
 
-            logging.info(f"Posting event \"{e.name}\".")
             asyncio.create_task(e.post_next_event(self.guild))
 
     async def async_setup(self):

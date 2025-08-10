@@ -2,6 +2,7 @@
 import datetime
 import zoneinfo
 import discord
+import logging
 from typing import Optional, Set
 
 TIMEZONE = zoneinfo.ZoneInfo("America/New_York")
@@ -52,8 +53,11 @@ class RecurringSameDayEvent():
         next_event_date = RecurringSameDayEvent.get_next_event_date(self.starting_date, self.frequency)
         
         if self.excluded_dates is not None and next_event_date in self.excluded_dates:
+            logging.info(f"Did not post event \"{self.name}\" because its date ({next_event_date}) is excluded.")
             return
 
+        
+        logging.info(f"Posting event \"{self.name}\".")
         await guild.create_scheduled_event(
             name = self.name,
             description = self.description,
