@@ -4,12 +4,14 @@ import discord
 import logging
 from typing import Optional, Set
 
-TIMEZONE = zoneinfo.ZoneInfo("America/New_York")
+from global_stuff import assert_getenv
+
+TIMEZONE = zoneinfo.ZoneInfo(assert_getenv("time_zone"))
 
 class RecurringSameDayEvent():
     def __init__(self,
         starting_date: datetime.date,
-        frequency: int,
+        frequency: datetime.timedelta,
         name: str,
         description: str,
         start_time: datetime.time,
@@ -25,37 +27,32 @@ class RecurringSameDayEvent():
         self.location = location
         self.excluded_dates = excluded_dates
     
-    @staticmethod
-    def get_next_event_date(starting_date: datetime.date, frequency: int) -> datetime.date:
+    def get_next_event_date(self) -> datetime.date:
         """
         find the next date of an event, given the first event's date
         and the frequency.
-
-        Args:
-            starting_date (datetime.date): date of the first event
-            frequency (int): number of days between 2 events 
         """
         today = datetime.date.today()
-        if today < starting_date:
-            return starting_date
+        if today < self.starting_date:
+            return self.starting_date
         
-        days_since_start = (today - starting_date).days
-        days_since_last_event = days_since_start % frequency
+        time_since_start = today - self.starting_date
+        time_since_last_event = time_since_start % self.frequency
+        last_event_date = today - time_since_last_event
 
-        return today + datetime.timedelta(days=(frequency - days_since_last_event))
+        return last_event_date + self.frequency
     
     async def post_next_event(self, guild: discord.Guild):
         """
         Post the next event unless its date is excluded
         """
         
-        next_event_date = RecurringSameDayEvent.get_next_event_date(self.starting_date, self.frequency)
+        next_event_date = self.get_next_event_date()
         
         if self.excluded_dates is not None and next_event_date in self.excluded_dates:
             logging.info(f"Did not post event \"{self.name}\" because its date ({next_event_date}) is excluded.")
             return
 
-        
         logging.info(f"Posting event \"{self.name}\".")
         await guild.create_scheduled_event(
             name = self.name,

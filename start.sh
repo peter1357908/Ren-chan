@@ -14,8 +14,8 @@ if [ -f "$PID_FILE" ]; then
     fi
 fi
 
-# app loggings should be in `app.log`. Here `python.log` should only capture
-# the tee'd stdout from running `subprocess.Popen(["./start.sh"])`, etc.
+# app loggings and exceptions should be in `app.log`. Here `python.log` should only capture
+# some pipenv logs and unexpected stdout/stderr stuff.
 pipenv run python3 bot.py > ./logs/python.log 2>&1 &
 NEW_PID=$!
 

@@ -8,7 +8,8 @@ from .same_day_event import RecurringSameDayEvent
 
 from global_stuff import assert_getenv
 
-GUILD_ID = int(assert_getenv("guild_id"))
+GUILD_ID                 = int(assert_getenv("guild_id"))
+ANNOUNCEMENTS_CHANNEL_ID = int(assert_getenv("announcements_channel_id"))
 
 tournament_dates = {
     datetime.date(2025, 9, 6)  # QCR local tournament 2025
@@ -17,7 +18,7 @@ tournament_dates = {
 events = [
     RecurringSameDayEvent(
         starting_date=datetime.date(year=2025, month=7, day=12),
-        frequency=28,
+        frequency=datetime.timedelta(weeks=4),
         name="Saturday Afternoon Riichi",
         description="This is our 4-weekly Saturday meetup! No experience required -- we'll be happy to teach!",
         start_time=datetime.time(hour=13),
@@ -27,7 +28,7 @@ events = [
     ),
     RecurringSameDayEvent(
         starting_date=datetime.date(year=2025, month=7, day=6),
-        frequency=14,
+        frequency=datetime.timedelta(weeks=2),
         name="Sunday Afternoon Riichi",
         description="This is our biweekly Sunday meetup! No experience required -- we'll be happy to teach!",
         start_time=datetime.time(hour=13),
@@ -41,7 +42,9 @@ class EventPoster(commands.Cog):
     def __init__(self, bot: commands.Bot, events: List[RecurringSameDayEvent]):
         self.bot = bot
         self.events = events
-        self.guild: discord.Guild = None # bot.get_guild(GUILD_ID) doesn't work; needs to be fetched via API
+        # the following are fetched in `self.async_setup()`
+        self.guild: discord.Guild = None
+        self.announcements_channel: discord.abc.GuildChannel = None
 
     @tasks.loop(hours=24, reconnect=True)
     async def try_post_events(self):
@@ -57,7 +60,11 @@ class EventPoster(commands.Cog):
             asyncio.create_task(e.post_next_event(self.guild))
 
     async def async_setup(self):
-        self.guild = await self.bot.fetch_guild(GUILD_ID)
+        await self.bot.wait_until_ready()
+        self.guild = self.bot.get_guild(GUILD_ID)
+        self.announcements_channel = self.guild.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
+        if self.announcements_channel is None:
+            logging.warning(f"Announcements channel ID specified ({ANNOUNCEMENTS_CHANNEL_ID})but no channel found! Won't be able to post announcements on regular events.")
         self.try_post_events.start()
 
     # ensure bot is ready before try_post_events is called
