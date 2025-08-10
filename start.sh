@@ -1,8 +1,6 @@
 #!/bin/bash
 PID_FILE="./app.pid"
-# print to both stdout and to a file. Matters for GitHub Actions and for printing to
-# the python log when run with `subprocess.Popen(["./start.sh"])`
-exec > >(tee ./logs/start.log) 2>&1
+exec > ./logs/start.log 2>&1
 
 # kill the bot if it's currently running
 if [ -f "$PID_FILE" ]; then
