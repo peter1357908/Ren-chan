@@ -17,5 +17,11 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
+            echo 'testing workflow! Running `ls -al'
+            ls -al
+            echo 'about to `cd ~/Ren-chan`!'
             cd ~/Ren-chan
+            echo 'Running `ls -al` again!'
+            ls -al
+            echo 'Running `./deploy.sh`'
             ./deploy.sh
