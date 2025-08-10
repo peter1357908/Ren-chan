@@ -38,6 +38,18 @@ First, `cp config.template.env config.env`.
 1. make a suitable Google Spreadsheet ([example](https://docs.google.com/spreadsheets/d/1pXlGjyz165S62-3-4ZXxit4Ci0yW8piVfbVObtjg7Is/edit?usp=sharing))
 1. share the Spreadsheet with that service account.
 1. fill in the `Google Sheets Stuff` section of [config.env](config.env)
+### OPTIONAL: Continuous Deployment
+This repo does contain a GitHub Actions workflow that automates deployment to a server via SSH. To enable this, follow these steps:
+1. generate your SSH key pair. Note that you should replace the `username` part with the target username on the server.
+```bash
+ssh-keygen -t ed25519 -C "username" -f ~/.ssh/github_deploy_key
+```
+1. if you are on any server where you manage `~/.ssh/authorized_keys`, then append the content of `~/.ssh/github_deploy_key.pub` into that file. HOWEVER, if you are not supposed to manually manage that file -- for example, you are using a Google Cloud VM -- then you should follow your cloud platform's instructions.
+    - For Google Cloud VM, you want to add the SSH public key to the VM instance [like so](https://cloud.google.com/compute/docs/connect/add-ssh-keys#after-vm-creation). Note that if you didn't replace the `username` in the previous step, you need to do it now -- Google Cloud console expects that.
+1. finally, you should configure the repository with the following Actions secrets:
+    - `SERVER_IP`: the external IP of your server
+    - `SERVER_SSH_KEY`: the content of `~/.ssh/github_deploy_key`
+    - `SERVER_USER`: the same username as you configured earlier
 
 ## Running the bot
 1. ensure you complete all steps in [the setup](#setting-up-the-bot).
