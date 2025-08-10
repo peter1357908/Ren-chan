@@ -1,5 +1,4 @@
-# note that `global_stuff` loads the `config.env` variables
-import logging.handlers
+# note that `global_stuff` loads the `config.env` variables and configures logging
 from global_stuff import assert_getenv
 
 from os import execl
@@ -8,21 +7,6 @@ from discord import app_commands, Interaction
 from discord.ext import commands
 import logging
 import traceback
-
-# INFO level captures all except DEBUG log messages.
-# the FileHandler by default appends to the given file
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(name)s: %(message)s',
-    datefmt='%m-%d %H:%M:%S',
-    handlers=[
-        logging.handlers.RotatingFileHandler(
-            "app.log",
-            maxBytes=5_000_000,
-            backupCount=1
-        )
-    ]
-)
 
 DISCORD_TOKEN = assert_getenv("bot_token")
 EXTENSIONS_FILE = assert_getenv("extensions_file")
@@ -72,8 +56,14 @@ async def shutdown(ctx: commands.Context):
 @bot.command(name='restart', hidden=True)
 @commands.is_owner()
 async def restart(ctx: commands.Context): 
-    await ctx.send("Restarting...")
+    await ctx.send("Restarting... (start.sh)")
     execl("./start.sh", "./start.sh")
+
+@bot.command(name='redeploy', hidden=True)
+@commands.is_owner()
+async def restart(ctx: commands.Context): 
+    await ctx.send("Redeploying... (deploy.sh)")
+    execl("./deploy.sh", "./deploy.sh")
 
 @bot.command(name='load', hidden=True)
 @commands.is_owner()
@@ -129,7 +119,7 @@ async def on_app_command_error(interaction: Interaction, error: app_commands.App
             await interaction.response.send_message(error_message)
         # do NOT `raise error` here; this somehow results in the error being
         # sent here again (TOTHINK: but only once! Intriguing...)
-        logging.info(''.join(traceback.format_exception(error))) # show the error to the console for debugging
+        logging.warning(''.join(traceback.format_exception(error))) # log the command error as a warning
     else:
         raise error
 bot.tree.on_error = on_app_command_error
