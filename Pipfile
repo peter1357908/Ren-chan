@@ -4,8 +4,8 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-python-dotenv = "*"
-discord-py = "*"
-gspread = "*"
+python-dotenv = "==1.0.1"
+discord-py = "==2.4.0"
+gspread = "==6.1.2"
 
 [dev-packages]
