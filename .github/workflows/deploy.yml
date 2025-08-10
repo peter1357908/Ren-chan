@@ -16,12 +16,10 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          # note that I can't run `./deploy.sh` as is, because it needs
+          # pipenv in the PATH. It won't be unless it's a login shell,
+          # so I need to force it to run in a login shell with `bash -l`
           script: |
-            echo 'testing workflow! Running `ls -al'
-            ls -al
-            echo 'about to `cd ~/Ren-chan`!'
             cd ~/Ren-chan
-            echo 'Running `ls -al` again!'
-            ls -al
-            echo 'Running `./deploy.sh`'
-            ./deploy.sh
+            bash -l ./deploy.sh
+
