@@ -42,7 +42,7 @@ First, `cp config.template.env config.env`.
 ## Running the bot
 1. ensure you complete all steps in [the setup](#setting-up-the-bot).
 1. run `./deploy.sh` (see [repo structure](#repository-structure) for details).
-1. in the relevant Discord server: run `rc/sync` to sync the slash commands for that server (`rc/` is the regular command prefix).
+1. in the relevant Discord server: run `rc/sync` to sync the slash commands for that server (`rc/` is the regular command prefix). For all bot admin commands, check [bot.py](bot.py).
 
 ## Relevant Links (References)
 - [Ronhorn](https://github.com/Longhorn-Riichi/Ronhorn)
