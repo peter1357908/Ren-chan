@@ -14,7 +14,9 @@ if [ -f "$PID_FILE" ]; then
     fi
 fi
 
-# we expect nothing written to stdout or stderr, but we track them just in case
+# we expect nothing written to stdout or stderr, but we track them just in case.
+# somehow the python process persists after exiting shell, without `nohup` or `disown`...
+# I need to figure out why.
 pipenv run python3 bot.py > ./logs/python.log 2>&1 &
 NEW_PID=$!
 
