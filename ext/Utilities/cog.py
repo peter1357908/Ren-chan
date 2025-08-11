@@ -19,13 +19,13 @@ import gspread
 import asyncio
 gs_client = gspread.service_account(filename='gs_service_account.json')
 # club leaderboard
-club_leaderboard_ss = gs_client.open_by_url(assert_getenv("club_leaderboard_url"))
+club_leaderboard_ss = gs_client.open_by_url(CLUB_LEADERBOARD_URL)
 club_leaderboard_registry = club_leaderboard_ss.worksheet("Registry")
 club_leaderboard_raw_scores = club_leaderboard_ss.worksheet("Raw Scores")
 club_leaderboard_registry_lock = asyncio.Lock()
 club_leaderboard_raw_scores_lock = asyncio.Lock()
 # friendly leaderboard
-friendly_leaderboard_ss = gs_client.open_by_url(assert_getenv("friendly_leaderboard_url"))
+friendly_leaderboard_ss = gs_client.open_by_url(FRIENDLY_LEADERBOARD_URL)
 friendly_leaderboard_registry = friendly_leaderboard_ss.worksheet("Registry")
 friendly_leaderboard_raw_scores = friendly_leaderboard_ss.worksheet("Raw Scores")
 friendly_leaderboard_registry_lock = asyncio.Lock()
@@ -292,6 +292,7 @@ class Utilities(commands.Cog):
 
         # OUTPUT CONSTRUCTION LOGIC
         # =======================
+        # TODO: explicitly implement the tie breaker
         ordered_players = sorted(player_scores, reverse=True)
 
         timestamp = str(datetime.datetime.now()).split(".")[0]
@@ -322,14 +323,16 @@ class Utilities(commands.Cog):
         if leaderboard_type == "Club Leaderboard":
             raw_scores = club_leaderboard_raw_scores
             raw_scores_lock = club_leaderboard_raw_scores_lock
+            url = CLUB_LEADERBOARD_URL
         else:
             raw_scores = friendly_leaderboard_raw_scores
             raw_scores_lock = friendly_leaderboard_raw_scores_lock
+            url = FRIENDLY_LEADERBOARD_URL
 
         async with raw_scores_lock:
             raw_scores.append_row(row)
 
-        score_printout = f"Successfully entered scores for a {gamemode} game onto **{leaderboard_type}**:\n" \
+        score_printout = f"Successfully entered scores for a {gamemode} game onto **[{leaderboard_type}]({url})**:\n" \
                             f"- **1st**: {ordered_players[0]}\n" \
                             f"- **2nd**: {ordered_players[1]}\n" \
                             f"- **3rd**: {ordered_players[2]}"
@@ -382,7 +385,7 @@ class Utilities(commands.Cog):
             chombo_north=chombo_north
         )
 
-        await interaction.followup.send(content=response)
+        await interaction.followup.send(content=response, suppress_embeds=True)
 
     @app_commands.command(name="enter_scores_friendly", description=f"Enter scores for an IRL friendly game, starting with the East player.")
     @app_commands.describe(game_type="Hanchan or tonpuu?",
@@ -427,7 +430,7 @@ class Utilities(commands.Cog):
             chombo_north=chombo_north
         )
 
-        await interaction.followup.send(content=response)
+        await interaction.followup.send(content=response, suppress_embeds=True)
 
         
 
