@@ -4,22 +4,18 @@ Ren-chan is a Discord bot for riichi club management, using Google Sheets for da
 1. isolate the club management commands from the mahjong analysis commands (e.g., `/injustice`)
 1. eventually create an end-to-end club management bot with minimal setup
 
-## Repository Structure:
-- `bot.py`: entry point of the Discord bot. Does the following:
-    1. imports `global_stuff.py`, which does the following:
-        1. load all the environment variabels from `config.env`
-    1. set up the non-slash Discord commands
-    1. set up command error handlers (both slash and non-slash)
-- `start.sh` and `deploy.sh`: entry points of the bot as a Python application.
-    - `start.sh`:
-        1. if the bot is currently running, kill it (based on the presence of `app.pid` file)
-        1. runs the bot under `pipenv` in the background and tracks its PID in `app.pid`.
-    - `deploy.sh`:
-        1. pulls from remote
-        1. installs latest depdendencies according to `Pipfile.lock`
-        1. calls `start.sh`.
-- `/ext/`: Discord bot extensions (each extension is a suite of slash commands and their helper functions)
-    - `Utilities`: various utilities, including recording in-person games, managing club membership, etc.
+See [Running the bot](#running-the-bot) section on a "quick" start guide.
+
+## Highlighted Functionalities
+1. manages recurring events
+    - creates each specified event if its next occurrence is missing
+    - posts a reminder some time before a recurring event's start.
+1. manages club memberships through the `register` slash commands
+    - supports self-registration and registration by admin.
+1. enables score tracking through the `enter_scores` slash commands
+    - supports entering scores for multiple game modes
+    - supports entering scores into multiple leaderboards
+    - validates the score entry before pushing it to the database).
 
 ## Setting up the bot
 First, `cp config.template.env config.env`.
@@ -58,6 +54,23 @@ ssh-keygen -t ed25519 -C "username" -f ~/.ssh/github_deploy_key
 1. ensure you complete all steps in [the setup](#setting-up-the-bot).
 1. run `./deploy.sh` (see [repo structure](#repository-structure) for details).
 1. in the relevant Discord server: run `rc/sync` to sync the slash commands for that server (`rc/` is the regular command prefix). For all bot admin commands, check [bot.py](bot.py).
+
+## Repository Structure:
+- `bot.py`: entry point of the Discord bot. Does the following:
+    1. imports `global_stuff.py`, which does the following:
+        1. load all the environment variabels from `config.env`
+    1. set up the non-slash Discord commands
+    1. set up command error handlers (both slash and non-slash)
+- `start.sh` and `deploy.sh`: entry points of the bot as a Python application.
+    - `start.sh`:
+        1. if the bot is currently running, kill it (based on the presence of `app.pid` file)
+        1. runs the bot under `pipenv` in the background and tracks its PID in `app.pid`.
+    - `deploy.sh`:
+        1. pulls from remote
+        1. installs latest depdendencies according to `Pipfile.lock`
+        1. calls `start.sh`.
+- `/ext/`: Discord bot extensions (each extension is a suite of slash commands and their helper functions)
+    - `Utilities`: various utilities, including recording in-person games, managing club membership, etc.
 
 ## Relevant Links (References)
 - [Ronhorn](https://github.com/Longhorn-Riichi/Ronhorn)
