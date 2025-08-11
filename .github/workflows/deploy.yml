@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main   # change to your deploy branch if needed
+    paths-ignore:
+      - 'README.md'
 
 jobs:
   deploy:
