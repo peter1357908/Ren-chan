@@ -19,6 +19,7 @@ events = [
     RecurringSameDayEvent(
         starting_date=datetime.date(year=2025, month=7, day=12),
         frequency=datetime.timedelta(weeks=4),
+        remind_before=datetime.timedelta(days=1),
         name="Saturday Afternoon Riichi",
         description="This is our 4-weekly Saturday meetup! No experience required -- we'll be happy to teach!",
         start_time=datetime.time(hour=13),
@@ -29,6 +30,7 @@ events = [
     RecurringSameDayEvent(
         starting_date=datetime.date(year=2025, month=7, day=6),
         frequency=datetime.timedelta(weeks=2),
+        remind_before=datetime.timedelta(days=1),
         name="Sunday Afternoon Riichi",
         description="This is our biweekly Sunday meetup! No experience required -- we'll be happy to teach!",
         start_time=datetime.time(hour=13),
@@ -44,7 +46,6 @@ class EventPoster(commands.Cog):
         self.events = events
         # the following are fetched in `self.async_setup()`
         self.guild: discord.Guild = None
-        self.announcements_channel: discord.abc.GuildChannel = None
 
     @tasks.loop(hours=24, reconnect=True)
     async def try_post_events(self):
@@ -57,14 +58,21 @@ class EventPoster(commands.Cog):
             if e.name in curr_event_names:
                 continue
 
-            asyncio.create_task(e.post_next_event(self.guild))
+            asyncio.create_task(e.post_next_event())
 
     async def async_setup(self):
         await self.bot.wait_until_ready()
         self.guild = self.bot.get_guild(GUILD_ID)
-        self.announcements_channel = self.guild.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
-        if self.announcements_channel is None:
-            logging.warning(f"Announcements channel ID specified ({ANNOUNCEMENTS_CHANNEL_ID})but no channel found! Won't be able to post announcements on regular events.")
+        announcements_channel = self.guild.get_channel(ANNOUNCEMENTS_CHANNEL_ID)
+        
+        if announcements_channel is None:
+            raise Exception(f"Announcements channel ID specified ({ANNOUNCEMENTS_CHANNEL_ID}) but no channel found!")
+        elif not isinstance(announcements_channel, discord.TextChannel):
+            raise Exception(f"Announcements found (ID: {ANNOUNCEMENTS_CHANNEL_ID}) but it's not a text channel!")
+        
+        for e in self.events:
+            e.set_guild_and_channel(self.guild, announcements_channel)
+
         self.try_post_events.start()
 
     # ensure bot is ready before try_post_events is called
