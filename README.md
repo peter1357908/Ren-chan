@@ -38,22 +38,23 @@ First, `cp config.template.env config.env`.
 1. update the [EventPoster cog](./ext/EventPoster/cog.py) with the appropriate recurring events you want the bot to manage. In the future, these will be configured in a config file instead.
 ### OPTIONAL: Continuous Deployment
 This repo does contain a GitHub Actions workflow that automates deployment to a server via SSH. To enable this, follow these steps:
-1. ensure that you have the repo at `~/Ren-chan` ([`deploy.yml`](./.github/workflows/deploy.yml) assumes this) and you have set up `config.env` per previous steps.
+1. ensure that you have the repo at `~/Ren-chan` ([`deploy.yml`](./.github/workflows/deploy.yml) assumes this) and you have finish the previous setup steps.
 1. generate your SSH key pair. Note that you should replace the `username` part with the target username on the server.
-```bash
-ssh-keygen -t ed25519 -C "username" -f ~/.ssh/github_deploy_key
-```
-1. if you are on any server where you manage `~/.ssh/authorized_keys`, then append the content of `~/.ssh/github_deploy_key.pub` into that file. HOWEVER, if you are not supposed to manually manage that file -- for example, you are using a Google Cloud VM -- then you should follow your cloud platform's instructions.
-    - For Google Cloud VM, you want to add the SSH public key to the VM instance [like so](https://cloud.google.com/compute/docs/connect/add-ssh-keys#after-vm-creation). Note that if you didn't replace the `username` in the previous step, you need to do it now -- Google Cloud console expects that.
-1. finally, you should configure the repository with the following Actions secrets:
+    ```bash
+    ssh-keygen -t ed25519 -C "username" -f ~/.ssh/github_deploy_key
+    ```
+1. if you can manually manage `~/.ssh/authorized_keys` on your server, then append the content of `~/.ssh/github_deploy_key.pub` into that file. HOWEVER, if you are not supposed to manually manage that file -- for example, you are using a Google Cloud VM -- then you should follow your cloud platform's instructions.
+    - For Google Cloud VM, you want to add the SSH public key to the VM instance [like so](https://cloud.google.com/compute/docs/connect/add-ssh-keys#after-vm-creation). Note that if you are pasting the content of your public key to Google Cloud console's SSH box, you need to ensure that it ends with the target username (hence the note in the previous step).
+1. finally, you should configure the repository with the following Actions secrets ([`deploy.yml`](./.github/workflows/deploy.yml) depends on them):
     - `SERVER_IP`: the external IP of your server
     - `SERVER_SSH_KEY`: the content of `~/.ssh/github_deploy_key`
     - `SERVER_USER`: the same username as you configured earlier
 
 ## Running the bot
 1. ensure you complete all steps in [the setup](#setting-up-the-bot).
-1. run `./deploy.sh` (see [repo structure](#repository-structure) for details).
-1. in the relevant Discord server: run `rc/sync` to sync the slash commands for that server (`rc/` is the regular command prefix). For all bot admin commands, check [bot.py](bot.py).
+1. run `./deploy.sh` (see [repo structure](#repository-structure) for a breakdown of `deploy.sh`).
+1. **IF** this is your first time deploying the bot to a server, **OR IF** you made a change to the I/O of any slash commands, then you need to run the `rc/sync` regular command to sync the slash commands (just post this as a message in the server and ensure it's visible to the bot).
+    - `rc/restart` is another convenient admin command to restart the bot. For all bot admin commands, check [bot.py](bot.py).
 
 ## Repository Structure:
 - `bot.py`: entry point of the Discord bot. Does the following:
