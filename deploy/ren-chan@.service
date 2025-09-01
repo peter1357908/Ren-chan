@@ -14,7 +14,6 @@ Environment="PIPENV_VENV_IN_PROJECT=1"
 StandardOutput=append:/home/%i/Ren-chan/logs/python.log
 StandardError=append:/home/%i/Ren-chan/logs/python.log
 
-ExecStartPre=/bin/sh -c 'echo "Debug: working directory = $(pwd), home = $HOME"; ls -l /home/%i/Ren-chan/logs'
 ExecStart=/bin/bash -lc 'pipenv run python bot.py'
 
 Restart=always
