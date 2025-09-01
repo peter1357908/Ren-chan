@@ -19,6 +19,7 @@ See [Running the bot](#running-the-bot) section on a "quick" start guide.
 
 ## Setting up the bot
 First, `cp config.template.env config.env`.
+
 ### Discord Stuff
 1. set up a bot account on Discord's [developer portal](https://discord.com/developers/applications) (`New Application`).
     - (SETTINGS → Bot) Privileged Gateway Intents: `SERVER MEMBERS INTENT` AND `MESSAGE CONTENT INTENT`
@@ -29,6 +30,7 @@ First, `cp config.template.env config.env`.
         * Text Permissions: Send Messages, Create Public Threads, Send Messages in Threads, Manage Messages, Manage Threads, Use External Emojis
     - [Current Bot Invite URL](https://discord.com/oauth2/authorize?client_id=1264000694369910834&permissions=326686223360&integration_type=0&scope=bot)
 1. fill in the `Discord Stuff` section of [config.env](config.env). The bot token can be obtained through (SETTINGS → Bot \[→ Reset Token\])
+
 ### Google Sheets Stuff
 1. set up a [Google Cloud project](https://console.cloud.google.com/). [Enable Google Sheets API access](https://console.cloud.google.com/apis/library/sheets.googleapis.com), and "Create Credentials" for a service account (no need to give it access to the project). Generate a JSON key for that service account and save it as `gs_service_account.json` in the [root directory]
 1. make a suitable Google Spreadsheet ([example](https://docs.google.com/spreadsheets/d/1pXlGjyz165S62-3-4ZXxit4Ci0yW8piVfbVObtjg7Is/edit?usp=sharing))
@@ -37,7 +39,8 @@ First, `cp config.template.env config.env`.
 ### Recurring Events
 1. update the [EventPoster cog](./ext/EventPoster/cog.py) with the appropriate recurring events you want the bot to manage. In the future, these will be configured in a config file instead.
 ### OPTIONAL: Continuous Deployment
-This repo does contain a GitHub Actions workflow that automates deployment to a server via SSH. To enable this, follow these steps:
+This repo does contain a GitHub Actions workflow that automates deployment to a server via SSH. Follow the below stops to enable this CD pipeline.
+
 1. ensure that you have the repo at `~/Ren-chan` ([`deploy.yml`](./.github/workflows/deploy.yml) assumes this) and you have finish the previous setup steps.
 1. generate your SSH key pair. Note that you should replace the `username` part with the target username on the server.
     ```bash
@@ -45,6 +48,10 @@ This repo does contain a GitHub Actions workflow that automates deployment to a 
     ```
 1. if you can manually manage `~/.ssh/authorized_keys` on your server, then append the content of `~/.ssh/github_deploy_key.pub` into that file. HOWEVER, if you are not supposed to manually manage that file -- for example, you are using a Google Cloud VM -- then you should follow your cloud platform's instructions.
     - For Google Cloud VM, you want to add the SSH public key to the VM instance [like so](https://cloud.google.com/compute/docs/connect/add-ssh-keys#after-vm-creation). Note that if you are pasting the content of your public key to Google Cloud console's SSH box, you need to ensure that it ends with the target username (hence the note in the previous step).
+1. ensure that your target user has passwordless `sudo` access. Check with `sudo ls /root`. If password is required, changing the setting with `sudo visudo`, and add the following to the end of the file:
+    ```
+    username ALL=(ALL) NOPASSWD:ALL
+    ```
 1. finally, you should configure the repository with the following Actions secrets ([`deploy.yml`](./.github/workflows/deploy.yml) depends on them):
     - `SERVER_IP`: the external IP of your server
     - `SERVER_SSH_KEY`: the content of `~/.ssh/github_deploy_key`
@@ -52,7 +59,7 @@ This repo does contain a GitHub Actions workflow that automates deployment to a 
 
 ## Running the bot
 1. ensure you complete all steps in [the setup](#setting-up-the-bot).
-1. run `./deploy.sh` (see [repo structure](#repository-structure) for a breakdown of `deploy.sh`).
+1. run `./deploy/deploy.sh` (see [repo structure](#repository-structure) for a breakdown of `deploy.sh`).
 1. **IF** this is your first time deploying the bot to a server, **OR IF** you made a change to the I/O of any slash commands, then you need to run the `rc/sync` regular command to sync the slash commands (just post this as a message in the server and ensure it's visible to the bot).
     - `rc/restart` is another convenient admin command to restart the bot. For all bot admin commands, check [bot.py](bot.py).
 
@@ -62,15 +69,18 @@ This repo does contain a GitHub Actions workflow that automates deployment to a 
         1. load all the environment variabels from `config.env`
     1. set up the non-slash Discord commands
     1. set up command error handlers (both slash and non-slash)
-- `start.sh` and `deploy.sh`: entry points of the bot as a Python application.
-    - `start.sh`:
-        1. if the bot is currently running, kill it (based on the presence of `app.pid` file)
-        1. runs the bot under `pipenv` in the background and tracks its PID in `app.pid`.
-    - `deploy.sh`:
+- `deploy/`: deployment-related scripts and service units.
+    - `ren-chan@.service`: template for the system-wide service (it cannot be a user-level service because it would die with the user session).
+        - The input specifier determines the user running the service.
+        - Restarts the bot automatically 5 seconds after it dies.
+    - `deploy.sh`: deploys the bot as a system-wide service, under the current user.
         1. pulls from remote
         1. installs latest depdendencies according to `Pipfile.lock`
-        1. calls `start.sh`.
+        1. sets up the service according to `ren-chan@.service` under the current user.
+    - `stop_service.sh`: stops the service (i.e., shuts down the bot)
+    - `undeploy.sh`: stops and deletes the service, uninstalls the pip environment, and removes the log files.
 - `/ext/`: Discord bot extensions (each extension is a suite of slash commands and their helper functions)
+    - `EventPoster`: automates posting regular events and reminders for those events.
     - `Utilities`: various utilities, including recording in-person games, managing club membership, etc.
 
 ## Relevant Links (References)

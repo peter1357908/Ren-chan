@@ -23,5 +23,4 @@ jobs:
           # so I need to force it to run in a login shell with `bash -l`
           script: |
             cd ~/Ren-chan
-            bash -l ./deploy.sh
-
+            bash -l deploy/deploy.sh

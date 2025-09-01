@@ -1,7 +1,6 @@
 # note that `global_stuff` loads the `config.env` variables and configures logging
 from global_stuff import assert_getenv
 
-import subprocess
 import discord
 from discord import app_commands, Interaction
 from discord.ext import commands
@@ -12,6 +11,7 @@ DISCORD_TOKEN = assert_getenv("bot_token")
 EXTENSIONS_FILE = assert_getenv("extensions_file")
 COMMAND_PREFIX = assert_getenv("command_prefix")
 BOT_MAINTAINER_ID = assert_getenv("bot_maintainer_id")
+BOT_TEST_CHANNEL_ID = assert_getenv("bot_test_channel_id")
 
 try:
     with open(EXTENSIONS_FILE, 'r') as f:
@@ -28,12 +28,8 @@ bot = commands.Bot(
     command_prefix=COMMAND_PREFIX,
     intents=intents)
 
-# bot events
-@bot.event
-async def on_ready():
-    logging.info(f"{bot.user} is now online.")
-
 # bot commands (non-slash; only for the admin/owner)
+# ====================
 @bot.command(name='sync', hidden=True)
 @commands.is_owner()
 async def sync(ctx: commands.Context):
@@ -47,23 +43,13 @@ async def sync_global(ctx: commands.Context):
     await bot.tree.sync()
     await ctx.send("Synced global slash commands.")
 
-@bot.command(name='shutdown', hidden=True)
-@commands.is_owner()
-async def shutdown(ctx: commands.Context):
-    await ctx.send("Shutting down...")
-    await bot.close()
-
+# Assuming we configured the service to restart the bot automatically,
+# we only need to gracefully shut down the bot for the "restart" command.
 @bot.command(name='restart', hidden=True)
 @commands.is_owner()
 async def restart(ctx: commands.Context): 
-    await ctx.send("Restarting... (start.sh)")
-    subprocess.Popen(["./start.sh"])
-
-@bot.command(name='redeploy', hidden=True)
-@commands.is_owner()
-async def restart(ctx: commands.Context): 
-    await ctx.send("Redeploying... (deploy.sh)")
-    subprocess.Popen(["./deploy.sh"])
+    await ctx.send("Shutting down and letting systemd handle restart.")
+    await bot.close()
 
 @bot.command(name='load', hidden=True)
 @commands.is_owner()
@@ -91,6 +77,23 @@ async def reload_extension(ctx: commands.Context, extension_name: str=""):
             await bot.reload_extension(extension)
         
         await ctx.send(f"Reloaded all extensions: {EXTENSIONS}.")
+
+# bot events
+# ====================
+@bot.event
+async def on_ready():
+    logging.info(f"{bot.user} is now online.")
+
+    try:
+        bot_test_channel = await bot.fetch_channel(BOT_TEST_CHANNEL_ID)
+    except discord.NotFound:
+        logging.warning("bot-test channel not found! Could not post successful start message.")
+        return
+    except discord.Forbidden:
+        logging.warning("No permission to access the bot-test channel.")
+        return
+    
+    await bot_test_channel.send("(Re-)started successfully!")
 
 # official way to handle all regular command errors
 @bot.event
@@ -131,6 +134,7 @@ async def setup_hook():
     for extension in EXTENSIONS:
         await bot.load_extension(extension)
 bot.setup_hook = setup_hook
-bot.remove_command('help')
+bot.remove_command('help')  # not bothering with a help command
 
+# `log_handler=None` will make the bot respect any existing logging configuration. 
 bot.run(DISCORD_TOKEN, log_handler=None)

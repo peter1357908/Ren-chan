@@ -12,7 +12,7 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S',
     handlers=[
         logging.handlers.RotatingFileHandler(
-            "./logs/app.log",
+            "./logs/bot.log",
             maxBytes=5_000_000,
             backupCount=1
         )
@@ -21,7 +21,7 @@ logging.basicConfig(
 
 # also log the exceptions but still invoke the default exception handler.
 # note that app command exceptions should be handled separately to ensure no interruption.
-# here, we are really only expecting exceptions that should crash the app.
+# here, we are really only expecting exceptions that should crash the bot.
 def handle_exception(exc_type, exc_value, exc_traceback):
     logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
     sys.__excepthook__(exc_type, exc_value, exc_traceback)

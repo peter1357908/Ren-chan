@@ -1,0 +1,24 @@
+# /etc/systemd/system/ren-chan@.service
+[Unit]
+Description=Ren-chan (Pipenv)
+After=network.target
+
+[Service]
+User=%i
+WorkingDirectory=/home/%i/Ren-chan
+
+Environment="PIPENV_VENV_IN_PROJECT=1"
+
+# Note that we set up logging inside the bot to record logs in `bot.log`.
+# Here, only unexpected logs (e.g., from Python itself) go to `python.log`.
+StandardOutput=append:/home/%i/Ren-chan/logs/python.log
+StandardError=append:/home/%i/Ren-chan/logs/python.log
+
+ExecStartPre=/bin/sh -c 'echo "Debug: working directory = $(pwd), home = $HOME"; ls -l /home/%i/Ren-chan/logs'
+ExecStart=/bin/bash -lc 'pipenv run python bot.py'
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
