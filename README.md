@@ -83,11 +83,8 @@ This repo does contain a GitHub Actions workflow that automates deployment to a 
     - `EventPoster`: automates posting regular events and reminders for those events.
     - `Utilities`: various utilities, including recording in-person games, managing club membership, etc.
 
-## Relevant Links (References)
+## Relevant Links / References
 - [Ronhorn](https://github.com/Longhorn-Riichi/Ronhorn)
-- [amae-koromo](https://github.com/SAPikachu/amae-koromo) and [amae-koromo-scripts](https://github.com/SAPikachu/amae-koromo-scripts)
 - [Ronnie](https://github.com/RiichiNomi/ronnie)
-- [mjsoul.py](https://github.com/RiichiNomi/mjsoul.py) (eventually we'll add our `mahjongsoul` module into the `mjsoul.py` package)
-- [mahjong_soul_api](https://github.com/MahjongRepository/mahjong_soul_api/)
 
 [root directory]: /
