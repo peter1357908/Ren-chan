@@ -1,4 +1,5 @@
 import datetime
+import zoneinfo
 import discord
 import gspread
 import logging
@@ -13,6 +14,7 @@ ELDER_ROLE: str               = assert_getenv("elder_role")
 CLUB_LEADERBOARD_URL: str     = assert_getenv("club_leaderboard_url")
 FRIENDLY_LEADERBOARD_URL: str = assert_getenv("friendly_leaderboard_url")
 REGISTRY_NAME_LENGTH: int     = int(assert_getenv("max_name_len"))
+TIME_ZONE: zoneinfo.ZoneInfo  = zoneinfo.ZoneInfo(assert_getenv("time_zone"))
 
 # Google Sheets stuff
 import gspread
@@ -294,8 +296,8 @@ class Utilities(commands.Cog):
         # =======================
         # TODO: explicitly implement the tie breaker
         ordered_players = sorted(player_scores, reverse=True)
-
-        timestamp = str(datetime.datetime.now()).split(".")[0]
+        
+        timestamp = str(datetime.datetime.now(TIME_ZONE)).split(".")[0]
         if game_style == "Yonma":
             row = [timestamp, gamemode, "yes",
                 ordered_players[0].discord_name, ordered_players[0].raw_score,
