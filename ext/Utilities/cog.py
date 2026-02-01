@@ -1,79 +1,14 @@
 import datetime
-import zoneinfo
 import discord
 import gspread
 import logging
 from discord.ext import commands
 from discord import app_commands, Interaction
 from typing import *
-from global_stuff import assert_getenv
 
-GUILD_ID: int                 = int(assert_getenv("guild_id"))
-OFFICER_ROLE: str             = assert_getenv("officer_role")
-ELDER_ROLE: str               = assert_getenv("elder_role")
-CLUB_LEADERBOARD_URL: str     = assert_getenv("club_leaderboard_url")
-FRIENDLY_LEADERBOARD_URL: str = assert_getenv("friendly_leaderboard_url")
-REGISTRY_NAME_LENGTH: int     = int(assert_getenv("max_name_len"))
-TIME_ZONE: zoneinfo.ZoneInfo  = zoneinfo.ZoneInfo(assert_getenv("time_zone"))
+from .config import *
+from .helpers import *
 
-# Google Sheets stuff
-import gspread
-import asyncio
-gs_client = gspread.service_account(filename='gs_service_account.json')
-# club leaderboard
-club_leaderboard_ss = gs_client.open_by_url(CLUB_LEADERBOARD_URL)
-club_leaderboard_registry = club_leaderboard_ss.worksheet("Registry")
-club_leaderboard_raw_scores = club_leaderboard_ss.worksheet("Raw Scores")
-club_leaderboard_registry_lock = asyncio.Lock()
-club_leaderboard_raw_scores_lock = asyncio.Lock()
-# friendly leaderboard
-friendly_leaderboard_ss = gs_client.open_by_url(FRIENDLY_LEADERBOARD_URL)
-friendly_leaderboard_registry = friendly_leaderboard_ss.worksheet("Registry")
-friendly_leaderboard_raw_scores = friendly_leaderboard_ss.worksheet("Raw Scores")
-friendly_leaderboard_registry_lock = asyncio.Lock()
-friendly_leaderboard_raw_scores_lock = asyncio.Lock()
-
-
-def get_discord_name(member: discord.Member) -> str:
-    discord_name = member.name
-    # add "#1234" if it exists
-    discriminator = str(member.discriminator)
-    if discriminator != "0":
-        discord_name += "#" + discriminator
-    return discord_name
-
-class PlayerScore:
-    def __init__(self, member: discord.Member,
-                       raw_score: int,
-                       num_chombo: int=0):
-        # the default values correspond to an AI opponent (not a real player)
-        self.discord_name = get_discord_name(member)
-        self.mention = member.mention
-        self.raw_score = raw_score
-        self.num_chombo = num_chombo
-
-    # comparisons are for the scores only (i.e., not discord names)
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, PlayerScore):
-            return self.raw_score == other.raw_score
-        return NotImplemented
-    
-    def __lt__(self, other):
-        if isinstance(other, PlayerScore):
-            return self.raw_score < other.raw_score
-        return NotImplemented
-
-    def __str__(self) -> str:
-        """
-        used for rendering the player score in output
-        """
-        if self.num_chombo > 0:
-            return f"{self.mention}: {self.raw_score} with {self.num_chombo} chombo"
-        else:
-            return f"{self.mention}: {self.raw_score}"
-
-    def __repr__(self) -> str:
-        return self.__str__()
 
 class Utilities(commands.Cog):
     """
@@ -81,179 +16,162 @@ class Utilities(commands.Cog):
     """
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    """
-    =====================================================
-    HELPERS
-    =====================================================
-    """
     
     """
     =====================================================
     SLASH COMMANDS
     =====================================================
     """
-        
-    async def _register(self, server_member: discord.Member, name: str, leaderboard_type: str) -> str:
+
+    def _register_on_one_leaderboard(
+            self,
+            old_registration_cell: Optional[gspread.cell.Cell],
+            discord_name: str,
+            name: str,
+            registry: gspread.Worksheet
+        ) -> None:
+        # this helper should only be called within a `registry_lock`
+
+        found_old_registration = old_registration_cell is not None
+
+        # TODO: ensure consistency of paid membership status across both leaderboards
+        paid_membership = "no"
+
+        # grab existing paid membership status & remove old registration if it exists
+        if found_old_registration:
+            [_, _, paid_membership] = registry.row_values(old_registration_cell.row)
+            registry.delete_rows(old_registration_cell.row)
+
+        # add new registration information
+        data = [
+            discord_name,
+            name,
+            paid_membership
+        ]
+        registry.append_row(data)
+    
+    async def _register(self, server_member: discord.Member, name: str) -> str:
         """
-        Add player to the registry on target leaderboard(s), removing any existing registration first.
-        Assumes input is already sanitized (e.g., `name` isn't 200 chars long)
+        Add player to the registry on both leaderboards, removing any existing registration first.
+        Assumes input is already sanitized (e.g., `name` isn't 200 chars long).
+        Requires a unique `name`.
         Returns the response string.
         """
         if len(name) > REGISTRY_NAME_LENGTH:
             return f"Please keep your preferred name within {REGISTRY_NAME_LENGTH} characters and `/register` again."
-        
-        discord_name = get_discord_name(server_member)
 
-        response = f"{server_member.mention}"
+        async with registry_lock:
+            # check if the `name` is already taken on either leaderboard
+            # since the registry should be consistent across both leaderboards,
+            # we complain when it's only taken on one of the leaderboards
+            found_name_cell = club_leaderboard_registry.find(name, in_column=2)
+            name_taken_club = found_name_cell is not None
+            
+            found_name_cell = friendly_leaderboard_registry.find(name, in_column=2)
+            name_taken_friendly = found_name_cell is not None
 
-        if leaderboard_type == "both leaderboards" or leaderboard_type == "Club Leaderboard":
-            curr_leaderboard_type = "Club Leaderboard"
-            registry = club_leaderboard_registry
-            registry_lock = club_leaderboard_registry_lock
-
-            async with registry_lock:
-                # find and delete any existing registration, while recording extra info like membership status
-                found_cell: gspread.cell.Cell = registry.find(discord_name, in_column=2)
-                found_old_registration = found_cell is not None
-
-                paid_membership = "no"
-                if found_old_registration:
-                    [_, _, paid_membership, *mahjongsoul_fields] = registry.row_values(found_cell.row)
-                    registry.delete_rows(found_cell.row)
-                # add new registration information
-                data = [name,
-                    discord_name,
-                    paid_membership]
-                registry.append_row(data)
-
-                if found_old_registration:
-                    response += f" updated **{curr_leaderboard_type}** registration"
+            if name_taken_club or name_taken_friendly:
+                if name_taken_club and name_taken_friendly:
+                    return f"The name **\"{name}\"** is already taken. Please choose a different name."
+                elif name_taken_club:
+                    return f"The name **\"{name}\"** is already taken on the Club Leaderboard, but it's not present on the Friendly Leaderboard. Please contact <@{BOT_MAINTAINER_ID}> to resolve this inconsistency."
                 else:
-                    response += f" registered on **{curr_leaderboard_type}**"
+                    return f"The name **\"{name}\"** is already taken on the Friendly Leaderboard, but it's not present on the Club Leaderboard. Please contact <@{BOT_MAINTAINER_ID}> to resolve this inconsistency."
 
-        if leaderboard_type == "both leaderboards" or leaderboard_type == "Friendly Leaderboard":
-            curr_leaderboard_type = "Friendly Leaderboard"
-            registry = friendly_leaderboard_registry
-            registry_lock = friendly_leaderboard_registry_lock
+            # similarly, check if the current member is already registered, by Discord ID.
+            # since the registry should be consistent across both leaderboards,
+            # we complain when it only shows up on one of the leaderboards
+            discord_name = get_discord_name(server_member)
 
-            async with registry_lock:
-                # find and delete any existing registration, while recording extra info like membership status
-                found_cell: gspread.cell.Cell = registry.find(discord_name, in_column=2)
-                found_old_registration = found_cell is not None
+            found_discord_cell_club = club_leaderboard_registry.find(discord_name, in_column=1)
+            discord_taken_club = found_discord_cell_club is not None
+            
+            found_discord_cell_friendly = friendly_leaderboard_registry.find(discord_name, in_column=1)
+            discord_taken_friendly = found_discord_cell_friendly is not None
 
-                paid_membership = "no"
-                if found_old_registration:
-                    [_, _, paid_membership, *mahjongsoul_fields] = registry.row_values(found_cell.row)
-                    registry.delete_rows(found_cell.row)
-                # add new registration information
-                data = [name,
-                    discord_name,
-                    paid_membership]
-                registry.append_row(data)
-                
-                if leaderboard_type != "Friendly Leaderboard":
-                    response += " and"
+            if discord_taken_club and not discord_taken_friendly:
+                return f"You are already registered on the Club Leaderboard, but not on the Friendly Leaderboard. Please contact <@{BOT_MAINTAINER_ID}> to resolve this inconsistency."
+            elif discord_taken_friendly and not discord_taken_club:
+                return f"You are already registered on the Friendly Leaderboard, but not on the Club Leaderboard. Please contact <@{BOT_MAINTAINER_ID}> to resolve this inconsistency."
 
-                if found_old_registration:
-                    response += f" updated **{curr_leaderboard_type}** registration"
-                else:
-                    response += f" registered on **{curr_leaderboard_type}**"
+            self._register_on_one_leaderboard(found_discord_cell_club, discord_name, name, club_leaderboard_registry)
+            self._register_on_one_leaderboard(found_discord_cell_friendly, discord_name, name, friendly_leaderboard_registry)
 
-        return response + f" with name **\"{name}\"**."
+            if discord_taken_club:
+                return f"{server_member.mention} updated their registration with name **\"{name}\"**."
+            else:
+                return f"{server_member.mention} registered with name **\"{name}\"**."
+            
     
-    @app_commands.command(name="register", description="Register with your name (or update your current registration) on a leaderboard.")
+    @app_commands.command(name="register", description="Register with your name (or update your current registration) on our leaderboards.")
     @app_commands.describe(
-        real_name=f"Your preferred, real-life name (no more than {REGISTRY_NAME_LENGTH} characters)",
-        leaderboard_type="Both leaderboards (default), or just one of them?")
+        real_name=f"Your preferred, real-life name (no more than {REGISTRY_NAME_LENGTH} characters)")
     async def register(self, interaction: Interaction,
-                       real_name: str,
-                       leaderboard_type: Literal["both leaderboards", "Club Leaderboard", "Friendly Leaderboard"] = "both leaderboards"):
+                       real_name: str):
         await interaction.response.defer()
-        response = await self._register(interaction.user, real_name, leaderboard_type)
+        response = await self._register(interaction.user, real_name)
         await interaction.followup.send(content=response)
     
     @app_commands.command(name="register_other", description=f"Register any server member. Only usable by @{OFFICER_ROLE}.")
     @app_commands.describe(
         server_member="The server member you want to register.",
-        real_name=f"The member's preferred, real-life name (no more than {REGISTRY_NAME_LENGTH} characters)",
-        leaderboard_type="Both leaderboards (default), or just one of them?")
+        real_name=f"The member's preferred, real-life name (no more than {REGISTRY_NAME_LENGTH} characters)")
     @app_commands.checks.has_role(OFFICER_ROLE)
     async def register_other(self, interaction: Interaction,
                        server_member: discord.Member,
-                       real_name: str,
-                       leaderboard_type: Literal["both leaderboards", "Club Leaderboard", "Friendly Leaderboard"] = "both leaderboards"):
+                       real_name: str):
         await interaction.response.defer()
-        response = await self._register(server_member, real_name, leaderboard_type)
+        response = await self._register(server_member, real_name)
         await interaction.followup.send(content=response)
 
-    async def _unregister(self, server_member: discord.Member, leaderboard_type: str) -> str:
+    async def _unregister(self, server_member: discord.Member) -> str:
         discord_name = get_discord_name(server_member)
 
-        response = ""
+        # since we are just unregistering, we don't need to worry about consistency checks
+        # just remove any existing registration on both leaderboards
+        async with registry_lock:
+            found_discord_cell_club = club_leaderboard_registry.find(discord_name, in_column=1)
+            registered_club = found_discord_cell_club is not None
+            if registered_club:
+                club_leaderboard_registry.delete_rows(found_discord_cell_club.row)
 
-        if leaderboard_type == "both leaderboards" or leaderboard_type == "Club Leaderboard":
-            curr_leaderboard_type = "Club Leaderboard"
-            registry = club_leaderboard_registry
-            registry_lock = club_leaderboard_registry_lock
+            found_discord_cell_friendly = friendly_leaderboard_registry.find(discord_name, in_column=1)
+            registered_friendly = found_discord_cell_friendly is not None
+            if registered_friendly:
+                friendly_leaderboard_registry.delete_rows(found_discord_cell_friendly.row)
 
-            async with registry_lock:
-                found_cell: gspread.cell.Cell = registry.find(discord_name, in_column=2)
-                if found_cell is None:
-                    response += f"{server_member.mention} is not a registered member on **{curr_leaderboard_type}**."
-                else:
-                    registry.delete_rows(found_cell.row)
-                    response += f"{server_member.mention}'s registration has been removed from **{curr_leaderboard_type}**."
+            if registered_club or registered_friendly:
+                return f"{server_member.mention} has been unregistered."
+            else:
+                return f"{server_member.mention} is not registered."
 
-        if leaderboard_type == "both leaderboards" or leaderboard_type == "Friendly Leaderboard":
-            curr_leaderboard_type = "Friendly Leaderboard"
-            registry = friendly_leaderboard_registry
-            registry_lock = friendly_leaderboard_registry_lock
-
-            if leaderboard_type != "Friendly Leaderboard":
-                response += '\n'
-
-            async with registry_lock:
-                found_cell: gspread.cell.Cell = registry.find(discord_name, in_column=2)
-                if found_cell is None:
-                    response += f"{server_member.mention} is not a registered member on **{curr_leaderboard_type}**."
-                else:
-                    registry.delete_rows(found_cell.row)
-                    response += f"{server_member.mention}'s registration has been removed from **{curr_leaderboard_type}**."
-        
-        return response
-
-    @app_commands.command(name="unregister", description="Remove your registered information from a leaderboard.")
-    @app_commands.describe(leaderboard_type="Both leaderboards (default), or just one of them?")
-    async def unregister(self, interaction: Interaction,
-                         leaderboard_type: Literal["both leaderboards", "Club Leaderboard", "Friendly Leaderboard"] = "both leaderboards"):
+    @app_commands.command(name="unregister", description="Remove your registered information.")
+    async def unregister(self, interaction: Interaction):
         await interaction.response.defer()
-        response = await self._unregister(interaction.user, leaderboard_type)
+        response = await self._unregister(interaction.user)
         await interaction.followup.send(content=response)
 
-    @app_commands.command(name="unregister_other", description=f"Unregister a given server member from a leaderboard. Only usable by @{OFFICER_ROLE}.")
-    @app_commands.describe(server_member="The server member you want to unregister.",
-                           leaderboard_type="Both leaderboards (default), or just one of them?")
+    @app_commands.command(name="unregister_other", description=f"Unregister a given server member. Only usable by @{OFFICER_ROLE}.")
+    @app_commands.describe(server_member="The server member you want to unregister.")
     @app_commands.checks.has_role(OFFICER_ROLE)
     async def unregister_other(self, interaction: Interaction,
-                               server_member: discord.Member,
-                               leaderboard_type: Literal["both leaderboards", "Club Leaderboard", "Friendly Leaderboard"] = "both leaderboards"):
+                               server_member: discord.Member):
         await interaction.response.defer()
-        response = await self._unregister(server_member, leaderboard_type)
+        response = await self._unregister(server_member)
         await interaction.followup.send(content=response)
 
-    async def _enter_score(self,
-                           leaderboard_type: str,
-                           game_type: str,
-                           player_east: discord.Member, score_east: int,
-                           player_south: discord.Member, score_south: int,
-                           player_west: discord.Member, score_west: int,
-                           player_north: Optional[discord.Member] = None, score_north: Optional[int] = None,
-                           leftover_points: int = 0,
-                           chombo_east: int = 0,
-                           chombo_south: int = 0,
-                           chombo_west: int = 0,
-                           chombo_north: int = 0) -> str:
+    async def _enter_scores(self,
+                            leaderboard_type: str,
+                            game_type: str,
+                            player_east: discord.Member, score_east: int,
+                            player_south: discord.Member, score_south: int,
+                            player_west: discord.Member, score_west: int,
+                            player_north: Optional[discord.Member] = None, score_north: Optional[int] = None,
+                            leftover_points: int = 0,
+                            chombo_east: int = 0,
+                            chombo_south: int = 0,
+                            chombo_west: int = 0,
+                            chombo_north: int = 0) -> str:
         # INPUT CHECKING LOGIC
         # =======================
         if chombo_east < 0 or chombo_south < 0 or chombo_west < 0 or chombo_north < 0:
@@ -359,21 +277,22 @@ class Utilities(commands.Cog):
                            chombo_west="The number of chombo West player committed",
                            chombo_north="The number of chombo North player committed")
     @app_commands.checks.has_any_role(OFFICER_ROLE, ELDER_ROLE)
-    async def enter_scores_club(self, interaction: Interaction,
-                                 game_type: Literal["Hanchan", "Tonpuu"],
-                                 player_east: discord.Member, score_east: int,
-                                 player_south: discord.Member, score_south: int,
-                                 player_west: discord.Member, score_west: int,
-                                 player_north: Optional[discord.Member] = None, score_north: Optional[int] = None,
-                                 leftover_points: int = 0,
-                                 chombo_east: int = 0,
-                                 chombo_south: int = 0,
-                                 chombo_west: int = 0,
-                                 chombo_north: int = 0):
+    async def enter_scores_club(self,
+                                interaction: Interaction,
+                                game_type: Literal["Hanchan", "Tonpuu"],
+                                player_east: discord.Member, score_east: int,
+                                player_south: discord.Member, score_south: int,
+                                player_west: discord.Member, score_west: int,
+                                player_north: Optional[discord.Member] = None, score_north: Optional[int] = None,
+                                leftover_points: int = 0,
+                                chombo_east: int = 0,
+                                chombo_south: int = 0,
+                                chombo_west: int = 0,
+                                chombo_north: int = 0):
 
         await interaction.response.defer()
 
-        response = await self._enter_score(
+        response = await self._enter_scores(
             leaderboard_type="Club Leaderboard",
             game_type=game_type,
             player_east=player_east, score_east=score_east,
@@ -405,20 +324,20 @@ class Utilities(commands.Cog):
                            chombo_west="The number of chombo West player committed",
                            chombo_north="The number of chombo North player committed")
     async def enter_scores_friendly(self, interaction: Interaction,
-                                 game_type: Literal["Hanchan", "Tonpuu"],
-                                 player_east: discord.Member, score_east: int,
-                                 player_south: discord.Member, score_south: int,
-                                 player_west: discord.Member, score_west: int,
-                                 player_north: Optional[discord.Member] = None, score_north: Optional[int] = None,
-                                 leftover_points: int = 0,
-                                 chombo_east: int = 0,
-                                 chombo_south: int = 0,
-                                 chombo_west: int = 0,
-                                 chombo_north: int = 0):
+                                game_type: Literal["Hanchan", "Tonpuu"],
+                                player_east: discord.Member, score_east: int,
+                                player_south: discord.Member, score_south: int,
+                                player_west: discord.Member, score_west: int,
+                                player_north: Optional[discord.Member] = None, score_north: Optional[int] = None,
+                                leftover_points: int = 0,
+                                chombo_east: int = 0,
+                                chombo_south: int = 0,
+                                chombo_west: int = 0,
+                                chombo_north: int = 0):
 
         await interaction.response.defer()
 
-        response = await self._enter_score(
+        response = await self._enter_scores(
             leaderboard_type="Friendly Leaderboard",
             game_type=game_type,
             player_east=player_east, score_east=score_east,

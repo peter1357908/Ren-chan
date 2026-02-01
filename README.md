@@ -36,8 +36,13 @@ First, `cp config.template.env config.env`.
 1. make a suitable Google Spreadsheet ([example](https://docs.google.com/spreadsheets/d/1pXlGjyz165S62-3-4ZXxit4Ci0yW8piVfbVObtjg7Is/edit?usp=sharing))
 1. share the Spreadsheet with that service account.
 1. fill in the `Google Sheets Stuff` section of [config.env](config.env)
+
+### Ruleset Stuff
+1. fill in the `Ruleset Stuff` section of [config.env](config.env) -- should be pretty straightforward.
+
 ### Recurring Events
 1. update the [EventPoster cog](./ext/EventPoster/cog.py) with the appropriate recurring events you want the bot to manage. In the future, these will be configured in a config file instead.
+
 ### OPTIONAL: Continuous Deployment
 This repo does contain a GitHub Actions workflow that automates deployment to a server via SSH. Follow the below stops to enable this CD pipeline.
 
