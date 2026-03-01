@@ -23,7 +23,7 @@ class RecurringSameDayEvent():
         start_time: datetime.time,
         end_time: datetime.time,
         location: str,
-        excluded_dates: Optional[Set[datetime.date]] = None):
+        excluded_dates: Set[datetime.date] | None = None):
         """
         NOTE: frequency's precision is up to "days" -- hours, etc. are discarded
         when used for calculation in self.get_next_event_date()

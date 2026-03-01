@@ -20,23 +20,25 @@ import asyncio
 
 CLUB_LEADERBOARD_URL: str     = assert_getenv("club_leaderboard_url")
 FRIENDLY_LEADERBOARD_URL: str = assert_getenv("friendly_leaderboard_url")
-REGISTRY_NAME_LENGTH: int     = int(assert_getenv("max_name_len"))
+MAX_NAME_LEN: int     = int(assert_getenv("max_name_len"))
 
 gs_client = gspread.service_account(filename='gs_service_account.json')
 # club leaderboard
-club_leaderboard_ss = gs_client.open_by_url(CLUB_LEADERBOARD_URL)
-club_leaderboard_registry = club_leaderboard_ss.worksheet("Registry")
-club_leaderboard_games = club_leaderboard_ss.worksheet("Games")
-club_leaderboard_raw_scores = club_leaderboard_ss.worksheet("Raw Scores")
-club_leaderboard_games_lock = asyncio.Lock()
-club_leaderboard_raw_scores_lock = asyncio.Lock()
+club_leaderboard_gs = gs_client.open_by_url(CLUB_LEADERBOARD_URL)
+club_leaderboard_registry = club_leaderboard_gs.worksheet("Registry")
+club_leaderboard_games = club_leaderboard_gs.worksheet("Games")
+club_leaderboard_scores = club_leaderboard_gs.worksheet("Scores")
+
+club_leaderboard_game_entry_lock = asyncio.Lock() # for both `games` and `scores` worksheets
+
 # friendly leaderboard
-friendly_leaderboard_ss = gs_client.open_by_url(FRIENDLY_LEADERBOARD_URL)
-friendly_leaderboard_registry = friendly_leaderboard_ss.worksheet("Registry")
-friendly_leaderboard_games = friendly_leaderboard_ss.worksheet("Games")
-friendly_leaderboard_raw_scores = friendly_leaderboard_ss.worksheet("Raw Scores")
-friendly_leaderboard_games_lock = asyncio.Lock()
-friendly_leaderboard_raw_scores_lock = asyncio.Lock()
+friendly_leaderboard_gs = gs_client.open_by_url(FRIENDLY_LEADERBOARD_URL)
+friendly_leaderboard_registry = friendly_leaderboard_gs.worksheet("Registry")
+friendly_leaderboard_games = friendly_leaderboard_gs.worksheet("Games")
+friendly_leaderboard_scores = friendly_leaderboard_gs.worksheet("Scores")
+
+friendly_leaderboard_game_entry_lock = asyncio.Lock() # for both `games` and `scores` worksheets
+
 # registry lock (used for both leaderboards)
 registry_lock = asyncio.Lock()
 

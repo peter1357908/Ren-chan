@@ -16,20 +16,17 @@ class Utilities(commands.Cog):
     """
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-    
-    """
-    =====================================================
-    SLASH COMMANDS
-    =====================================================
-    """
 
+    # ===================================================
+    # REGISTRATION LOGIC
+    # ===================================================
     def _register_on_one_leaderboard(
-            self,
-            old_registration_cell: Optional[gspread.cell.Cell],
-            discord_name: str,
-            name: str,
-            registry: gspread.Worksheet
-        ) -> None:
+        self,
+        old_registration_cell: gspread.cell.Cell | None,
+        discord_name: str,
+        name: str,
+        registry: gspread.Worksheet
+    ) -> None:
         # this helper should only be called within a `registry_lock`
 
         found_old_registration = old_registration_cell is not None
@@ -57,8 +54,8 @@ class Utilities(commands.Cog):
         Requires a unique `name`.
         Returns the response string.
         """
-        if len(name) > REGISTRY_NAME_LENGTH:
-            return f"Please keep your preferred name within {REGISTRY_NAME_LENGTH} characters and `/register` again."
+        if len(name) > MAX_NAME_LEN:
+            return f"Please keep your preferred name within {MAX_NAME_LEN} characters and `/register` again."
 
         async with registry_lock:
             # check if the `name` is already taken on either leaderboard
@@ -105,7 +102,7 @@ class Utilities(commands.Cog):
     
     @app_commands.command(name="register", description="Register with your name (or update your current registration) on our leaderboards.")
     @app_commands.describe(
-        real_name=f"Your preferred, real-life name (no more than {REGISTRY_NAME_LENGTH} characters)")
+        real_name=f"Your preferred, real-life name (no more than {MAX_NAME_LEN} characters)")
     async def register(self, interaction: Interaction,
                        real_name: str):
         await interaction.response.defer()
@@ -115,7 +112,7 @@ class Utilities(commands.Cog):
     @app_commands.command(name="register_other", description=f"Register any server member. Only usable by @{OFFICER_ROLE}.")
     @app_commands.describe(
         server_member="The server member you want to register.",
-        real_name=f"The member's preferred, real-life name (no more than {REGISTRY_NAME_LENGTH} characters)")
+        real_name=f"The member's preferred, real-life name (no more than {MAX_NAME_LEN} characters)")
     @app_commands.checks.has_role(OFFICER_ROLE)
     async def register_other(self, interaction: Interaction,
                        server_member: discord.Member,
@@ -160,141 +157,148 @@ class Utilities(commands.Cog):
         response = await self._unregister(server_member)
         await interaction.followup.send(content=response)
 
-    async def _enter_scores(self,
-                            leaderboard_type: str,
-                            game_type: str,
-                            player_east: discord.Member, score_east: int,
-                            player_south: discord.Member, score_south: int,
-                            player_west: discord.Member, score_west: int,
-                            player_north: Optional[discord.Member] = None, score_north: Optional[int] = None,
-                            leftover_points: int = 0,
-                            chombo_east: int = 0,
-                            chombo_south: int = 0,
-                            chombo_west: int = 0,
-                            chombo_north: int = 0) -> str:
+    # ===================================================
+    # SCORE ENTRY LOGIC
+    # ===================================================
+    async def _enter_scores(
+        self,
+        leaderboard_type: str,
+        game_length: str,
+        player_east: discord.Member, score_east: int,
+        player_south: discord.Member, score_south: int,
+        player_west: discord.Member, score_west: int,
+        player_north: discord.Member | None = None, score_north: int | None = None,
+        leftover_points: int = 0,
+        chombo_east: int = 0,
+        chombo_south: int = 0,
+        chombo_west: int = 0,
+        chombo_north: int = 0
+    ) -> str:
         # INPUT CHECKING LOGIC
         # =======================
         if chombo_east < 0 or chombo_south < 0 or chombo_west < 0 or chombo_north < 0:
             return "Error: negative chombo count."
 
+        # identify the game mode based on whether the North player is present
         if player_north is None:
             if len(set([player_east, player_south, player_west])) != 3:
                 return "Error: duplicate player entered."
             
-            expected_total = 3*35000
-            player_score_east = PlayerScore(player_east, score_east, chombo_east)
-            player_score_south = PlayerScore(player_south, score_south, chombo_south)
-            player_score_west = PlayerScore(player_west, score_west, chombo_west)
-            player_scores = [player_score_east, player_score_south, player_score_west]
-            game_style = "Sanma"
+            expected_total = 3 * SANMA_STARTING_POINTS
+            game_mode = "Sanma"
         else:
             if len(set([player_east, player_south, player_west, player_north])) != 4:
                 return "Error: duplicate player entered."
             if score_north is None:
                 return "Error: missing Player 4's score."
-            
-            expected_total = 4*25000
-            player_score_east = PlayerScore(player_east, score_east, chombo_east)
-            player_score_south = PlayerScore(player_south, score_south, chombo_south)
-            player_score_west = PlayerScore(player_west, score_west, chombo_west)
-            player_score_north = PlayerScore(player_north, score_north, chombo_north)
-            player_scores = [player_score_east, player_score_south, player_score_west, player_score_north]
-            game_style = "Yonma"
+            expected_total = 4 * YONMA_STARTING_POINTS
+            game_mode = "Yonma"
         
-        # TODO: make more elegant!!
+        # ensure the (total scores + leftover points) = the expected total
         total_score = score_east + score_south + score_west + leftover_points
-        if game_style == "Yonma":
+        if game_mode == "Yonma":
             total_score += score_north
-        gamemode = f"{game_style} {game_type}"
-
+        
         if total_score != expected_total:
-            return f"Error: Entered scores sum up to be {total_score}.\nExpected {expected_total} for {gamemode}."
+            return f"Error: Entered scores sum up to be {total_score}.\nExpected {expected_total} for {game_mode}."
+        
+        # initialize the East, South, West PlayerScore. If Yonma, also initialize the North PlayerScore.
+        player_score_east = PlayerScore("East", player_east, score_east, chombo_east * DEFAULT_CHOMBO_PENALTY)
+        player_score_south = PlayerScore("South", player_south, score_south, chombo_south * DEFAULT_CHOMBO_PENALTY)
+        player_score_west = PlayerScore("West", player_west, score_west, chombo_west * DEFAULT_CHOMBO_PENALTY)
+        player_scores = [player_score_east, player_score_south, player_score_west]
+        if game_mode == "Yonma":
+            player_score_north = PlayerScore("North", player_north, score_north, chombo_north * DEFAULT_CHOMBO_PENALTY)
+            player_scores.append(player_score_north)
 
         # OUTPUT CONSTRUCTION LOGIC
         # =======================
-        # TODO: explicitly implement the tie breaker
-        ordered_players = sorted(player_scores, reverse=True)
+        # the magic helper
+        calculate_placement_and_final_score(game_mode, game_length, player_scores)
         
         timestamp = str(datetime.datetime.now(TIME_ZONE)).split(".")[0]
-        if game_style == "Yonma":
-            row = [timestamp, gamemode, "yes",
-                ordered_players[0].discord_name, ordered_players[0].raw_score,
-                ordered_players[1].discord_name, ordered_players[1].raw_score,
-                ordered_players[2].discord_name, ordered_players[2].raw_score,
-                ordered_players[3].discord_name, ordered_players[3].raw_score,
-                leftover_points,
-                ordered_players[0].num_chombo,
-                ordered_players[1].num_chombo,
-                ordered_players[2].num_chombo,
-                ordered_players[3].num_chombo]
-        else:
-            row = [timestamp, gamemode, "yes",
-                ordered_players[0].discord_name, ordered_players[0].raw_score,
-                ordered_players[1].discord_name, ordered_players[1].raw_score,
-                ordered_players[2].discord_name, ordered_players[2].raw_score,
-                "", "",
-                leftover_points,
-                ordered_players[0].num_chombo,
-                ordered_players[1].num_chombo,
-                ordered_players[2].num_chombo,
-                ""]
-        
+        game_type = f"{game_mode} {game_length}"
+
+        game_row = [
+            timestamp,
+            game_type,
+            leftover_points
+        ]
+
+        score_rows = []
+        for ps in player_scores:
+            score_row = [
+                timestamp,
+                game_type,
+                ps.seat,
+                ps.discord_name,
+                ps.raw_score,
+                ps.placement,
+                ps.uma,
+                ps.penalty,
+                ps.final_score
+            ]
+            score_rows.append(score_row)
+
         # enter the scores into the sheet
         if leaderboard_type == "Club Leaderboard":
-            raw_scores = club_leaderboard_raw_scores
-            raw_scores_lock = club_leaderboard_raw_scores_lock
+            games_sheet = club_leaderboard_games
+            scores_sheet = club_leaderboard_scores
+            game_entry_lock = club_leaderboard_game_entry_lock
             url = CLUB_LEADERBOARD_URL
         else:
-            raw_scores = friendly_leaderboard_raw_scores
-            raw_scores_lock = friendly_leaderboard_raw_scores_lock
+            games_sheet = friendly_leaderboard_games
+            scores_sheet = friendly_leaderboard_scores
+            game_entry_lock = friendly_leaderboard_game_entry_lock
             url = FRIENDLY_LEADERBOARD_URL
 
-        async with raw_scores_lock:
-            raw_scores.append_row(row)
+        async with game_entry_lock:
+            games_sheet.append_row(game_row)
+            scores_sheet.append_rows(score_rows)
 
-        score_printout = f"Successfully entered scores for a {gamemode} game onto **[{leaderboard_type}]({url})**:\n" \
-                            f"- **1st**: {ordered_players[0]}\n" \
-                            f"- **2nd**: {ordered_players[1]}\n" \
-                            f"- **3rd**: {ordered_players[2]}"
-        if game_style == "Yonma":
-            score_printout += f"\n- **4th**: {ordered_players[3]}"
+        score_printout = f"Successfully entered scores for a {game_type} game onto **[{leaderboard_type}]({url})**:\n"
+        for ps in player_scores:
+            score_printout += f"\n{ps}\n"
 
         return score_printout
 
     @app_commands.command(name="enter_scores_club", description=f"Enter scores for a club game. Only usable by @{OFFICER_ROLE} and @{ELDER_ROLE}.")
-    @app_commands.describe(game_type="Hanchan or tonpuu?",
-                           player_east="The East player you want to record the score for.",
-                           score_east="Score for East player.",
-                           player_south="The South player you want to record the score for.",
-                           score_south="Score for South player.",
-                           player_west="The West player you want to record the score for.",
-                           score_west="Score for West player.",
-                           player_north="The North player (if Yonma) you want to record the score for.",
-                           score_north="Score for North player (if Yonma).",
-                           leftover_points="(optional) Leftover points (e.g., leftover riichi sticks).",
-                           chombo_east="The number of chombo East player committed",
-                           chombo_south="The number of chombo South player committed",
-                           chombo_west="The number of chombo West player committed",
-                           chombo_north="The number of chombo North player committed")
+    @app_commands.describe(
+        game_length="Hanchan or tonpuu?",
+        player_east="The East player you want to record the score for.",
+        score_east="Score for East player.",
+        player_south="The South player you want to record the score for.",
+        score_south="Score for South player.",
+        player_west="The West player you want to record the score for.",
+        score_west="Score for West player.",
+        player_north="The North player (if Yonma) you want to record the score for.",
+        score_north="Score for North player (if Yonma).",
+        leftover_points="(optional) Leftover points (e.g., leftover riichi sticks).",
+        chombo_east="The number of chombo East player committed",
+        chombo_south="The number of chombo South player committed",
+        chombo_west="The number of chombo West player committed",
+        chombo_north="The number of chombo North player committed")
     @app_commands.checks.has_any_role(OFFICER_ROLE, ELDER_ROLE)
-    async def enter_scores_club(self,
-                                interaction: Interaction,
-                                game_type: Literal["Hanchan", "Tonpuu"],
-                                player_east: discord.Member, score_east: int,
-                                player_south: discord.Member, score_south: int,
-                                player_west: discord.Member, score_west: int,
-                                player_north: Optional[discord.Member] = None, score_north: Optional[int] = None,
-                                leftover_points: int = 0,
-                                chombo_east: int = 0,
-                                chombo_south: int = 0,
-                                chombo_west: int = 0,
-                                chombo_north: int = 0):
+    async def enter_scores_club(
+        self,
+        interaction: Interaction,
+        game_length: Literal["Hanchan", "Tonpuu"],
+        player_east: discord.Member, score_east: int,
+        player_south: discord.Member, score_south: int,
+        player_west: discord.Member, score_west: int,
+        player_north: discord.Member | None = None, score_north: int | None = None,
+        leftover_points: int = 0,
+        chombo_east: int = 0,
+        chombo_south: int = 0,
+        chombo_west: int = 0,
+        chombo_north: int = 0
+    ) -> None:
 
         await interaction.response.defer()
 
         response = await self._enter_scores(
             leaderboard_type="Club Leaderboard",
-            game_type=game_type,
+            game_length=game_length,
             player_east=player_east, score_east=score_east,
             player_south=player_south, score_south=score_south,
             player_west=player_west, score_west=score_west,
@@ -309,37 +313,41 @@ class Utilities(commands.Cog):
         await interaction.followup.send(content=response, suppress_embeds=True)
 
     @app_commands.command(name="enter_scores_friendly", description=f"Enter scores for an IRL friendly game, starting with the East player.")
-    @app_commands.describe(game_type="Hanchan or tonpuu?",
-                           player_east="The East player you want to record the score for.",
-                           score_east="Score for East player.",
-                           player_south="The South player you want to record the score for.",
-                           score_south="Score for South player.",
-                           player_west="The West player you want to record the score for.",
-                           score_west="Score for West player.",
-                           player_north="The North player (if Yonma) you want to record the score for.",
-                           score_north="Score for North player (if Yonma).",
-                           leftover_points="(optional) Leftover points (e.g., leftover riichi sticks).",
-                           chombo_east="The number of chombo East player committed",
-                           chombo_south="The number of chombo South player committed",
-                           chombo_west="The number of chombo West player committed",
-                           chombo_north="The number of chombo North player committed")
-    async def enter_scores_friendly(self, interaction: Interaction,
-                                game_type: Literal["Hanchan", "Tonpuu"],
-                                player_east: discord.Member, score_east: int,
-                                player_south: discord.Member, score_south: int,
-                                player_west: discord.Member, score_west: int,
-                                player_north: Optional[discord.Member] = None, score_north: Optional[int] = None,
-                                leftover_points: int = 0,
-                                chombo_east: int = 0,
-                                chombo_south: int = 0,
-                                chombo_west: int = 0,
-                                chombo_north: int = 0):
+    @app_commands.describe(
+        game_length="Hanchan or tonpuu?",
+        player_east="The East player you want to record the score for.",
+        score_east="Score for East player.",
+        player_south="The South player you want to record the score for.",
+        score_south="Score for South player.",
+        player_west="The West player you want to record the score for.",
+        score_west="Score for West player.",
+        player_north="The North player (if Yonma) you want to record the score for.",
+        score_north="Score for North player (if Yonma).",
+        leftover_points="(optional) Leftover points (e.g., leftover riichi sticks).",
+        chombo_east="The number of chombo East player committed",
+        chombo_south="The number of chombo South player committed",
+        chombo_west="The number of chombo West player committed",
+        chombo_north="The number of chombo North player committed")
+    async def enter_scores_friendly(
+        self,
+        interaction: Interaction,
+        game_length: Literal["Hanchan", "Tonpuu"],
+        player_east: discord.Member, score_east: int,
+        player_south: discord.Member, score_south: int,
+        player_west: discord.Member, score_west: int,
+        player_north: discord.Member | None = None, score_north: int | None = None,
+        leftover_points: int = 0,
+        chombo_east: int = 0,
+        chombo_south: int = 0,
+        chombo_west: int = 0,
+        chombo_north: int = 0
+    ) -> None:
 
         await interaction.response.defer()
 
         response = await self._enter_scores(
             leaderboard_type="Friendly Leaderboard",
-            game_type=game_type,
+            game_length=game_length,
             player_east=player_east, score_east=score_east,
             player_south=player_south, score_south=score_south,
             player_west=player_west, score_west=score_west,

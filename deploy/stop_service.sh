@@ -9,3 +9,5 @@ SERVICE_OWNER="${USER}"
 
 sudo systemctl stop "ren-chan@${SERVICE_OWNER}"
 sudo systemctl disable "ren-chan@${SERVICE_OWNER}"
+
+echo "Service stopped and disabled for user ${SERVICE_OWNER}"
