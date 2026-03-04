@@ -33,7 +33,7 @@ First, `cp config.template.env config.env`.
 
 ### Google Sheets Stuff
 1. set up a [Google Cloud project](https://console.cloud.google.com/). [Enable Google Sheets API access](https://console.cloud.google.com/apis/library/sheets.googleapis.com), and "Create Credentials" for a service account (no need to give it access to the project). Generate a JSON key for that service account and save it as `gs_service_account.json` in the [root directory]
-1. make a suitable Google Spreadsheet ([example](https://docs.google.com/spreadsheets/d/1pXlGjyz165S62-3-4ZXxit4Ci0yW8piVfbVObtjg7Is/edit?usp=sharing))
+1. make a suitable Google Spreadsheet ([example](https://docs.google.com/spreadsheets/d/1dMdvIMltCKyr3H5uVEt2QMM5SPX3kLNALdis1cJ6BTw/edit?usp=sharing))
 1. share the Spreadsheet with that service account.
 1. fill in the `Google Sheets Stuff` section of [config.env](config.env)
 
