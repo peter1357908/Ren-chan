@@ -11,8 +11,8 @@ from global_stuff import assert_getenv
 GUILD_ID                 = int(assert_getenv("guild_id"))
 ANNOUNCEMENTS_CHANNEL_ID = int(assert_getenv("announcements_channel_id"))
 
-tournament_dates = {
-    datetime.date(2025, 9, 6)  # QCR local tournament 2025
+excluded_dates = {
+    # datetime.date(2025, 9, 6)  # QCR local tournament 2025
 }
 
 events = [
@@ -25,7 +25,7 @@ events = [
         start_time=datetime.time(hour=13),
         end_time=datetime.time(hour=18),
         location="Element Eatery (5350 Medpace Way, Cincinnati, OH 45227)",
-        excluded_dates=tournament_dates
+        excluded_dates=excluded_dates
     ),
     RecurringSameDayEvent(
         starting_date=datetime.date(year=2025, month=7, day=6),
@@ -36,7 +36,7 @@ events = [
         start_time=datetime.time(hour=13),
         end_time=datetime.time(hour=18),
         location="Element Eatery (5350 Medpace Way, Cincinnati, OH 45227)",
-        excluded_dates=tournament_dates
+        excluded_dates=excluded_dates
     )
 ]
 
@@ -47,18 +47,22 @@ class EventPoster(commands.Cog):
         # the following are fetched in `self.async_setup()`
         self.guild: discord.Guild = None
 
-    @tasks.loop(hours=24, reconnect=True)
+    @tasks.loop(hours=12, reconnect=True)
     async def try_post_events(self):
         logging.info("Checking if any event needs to be posted...")
         
         curr_events = await self.guild.fetch_scheduled_events()
-        curr_event_names = {e.name for e in curr_events}
 
         for e in self.events:
-            if e.name in curr_event_names:
+            # for each intended event, check if it's already posted on Discord.
+            # if already posted, reconcile the bot's internal state for reminder posting.
+            # if not already posted, post the event and set up reminders.
+            matching_events = [curr_event for curr_event in curr_events if curr_event.name == e.name]
+            if matching_events:
+                await e.reconcile_event_reminder(matching_events)
                 continue
 
-            asyncio.create_task(e.post_next_event())
+            asyncio.create_task(e.post_next_event_and_schedule_reminder())
 
     async def async_setup(self):
         await self.bot.wait_until_ready()

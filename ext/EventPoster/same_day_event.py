@@ -3,7 +3,7 @@ import datetime
 import zoneinfo
 import discord
 import logging
-from typing import Optional, Set
+from typing import Sequence, Set
 
 from global_stuff import assert_getenv
 
@@ -42,6 +42,7 @@ class RecurringSameDayEvent():
         # the following must be set with self.set_guild_and_channel()
         self.reminder_channel: discord.TextChannel = None
         self.guild: discord.Guild = None
+        self._pending_reminder_event_ids: Set[int] = set()  # tracks event IDs with scheduled reminder tasks
 
     def set_guild_and_channel(self, guild: discord.Guild, reminder_channel: discord.TextChannel):
         self.reminder_channel = reminder_channel
@@ -62,38 +63,96 @@ class RecurringSameDayEvent():
 
         return last_event_date + self.frequency
     
-    async def _delayed_reminder(self, delay: float, scheduled_event: discord.ScheduledEvent):
+    async def wait_and_send_reminder(self, delay: float, scheduled_event: discord.ScheduledEvent):
         await asyncio.sleep(delay)
-        logging.info(f"Sending reminder for \"{self.name}\".")
-        await self.reminder_channel.send(
+        await self._send_reminder(scheduled_event)
+        self._pending_reminder_event_ids.discard(scheduled_event.id)
+    
+    def _schedule_reminder(self, event_datetime: datetime.datetime, scheduled_event: discord.ScheduledEvent):
+        reminder_datetime = event_datetime - self.remind_before
+        delay_td = reminder_datetime - datetime.datetime.now(TIME_ZONE)
+
+        logging.info(f"Scheduling reminder for \"{self.name}\" in {delay_td}.")
+        self._pending_reminder_event_ids.add(scheduled_event.id)
+        asyncio.create_task(self.wait_and_send_reminder(delay_td.total_seconds(), scheduled_event))
+
+    def _build_reminder_message(self, scheduled_event: discord.ScheduledEvent) -> str:
+        return (
             f"⏰ Reminder: **{self.name}** is coming up! We'll see you there!\n"
             f"Please RSVP in the event widget below:\n"
             f"{scheduled_event.url}"
         )
-    
-    def _schedule_reminder(self, event_datetime: datetime.datetime, scheduled_event: discord.ScheduledEvent):
-        reminder_datetime = event_datetime - self.remind_before
-        delay = (reminder_datetime - datetime.datetime.now(TIME_ZONE)).total_seconds()
 
-        if delay < 0:
-            logging.warning(f"Reminder time for event \"{self.name}\" is in the past -- skipping.")
+    async def _send_reminder(self, scheduled_event: discord.ScheduledEvent):
+        logging.info(f"Sending reminder for \"{self.name}\".")
+        await self.reminder_channel.send(self._build_reminder_message(scheduled_event))
+
+    async def _reminder_already_posted(self, scheduled_event: discord.ScheduledEvent, reminder_datetime: datetime.datetime) -> bool:
+        # Search a bounded range to avoid scanning entire channel history.
+        # (1 hour before reminder time to 1 hour after event start time)
+        search_after = reminder_datetime - datetime.timedelta(hours=1)
+        search_before = scheduled_event.start_time + datetime.timedelta(hours=1)
+        me = self.guild.me
+
+        # 20 should be more than enough; few messages are sent in the reminder channel
+        async for message in self.reminder_channel.history(limit=20, after=search_after, before=search_before):
+            if me is not None and message.author.id != me.id:
+                continue
+            if scheduled_event.url in message.content:
+                return True
+
+        return False
+    
+    async def reconcile_event_reminder(self, existing_events: Sequence[discord.ScheduledEvent]):
+        """
+        Ensure the reminder is/will be posted for the next upcoming event in existing_events.
+        This is idempotent and can be called every startup/loop.
+        """
+        # filter for the next upcoming event, if there are multiple events with the same name.
+        now = datetime.datetime.now(TIME_ZONE)
+        upcoming = [e for e in existing_events if e.start_time is not None and e.start_time > now]
+        if not upcoming:
+            return # no upcoming event, so nothing to reconcile
+        
+        scheduled_event = min(upcoming, key=lambda e: e.start_time)
+        event_datetime = scheduled_event.start_time
+        reminder_datetime = event_datetime - self.remind_before
+
+        # unschedule the reminder task if the reminder has already been posted
+        if await self._reminder_already_posted(scheduled_event, reminder_datetime):
+            self._pending_reminder_event_ids.discard(scheduled_event.id)
+            logging.info(
+                f"Reminder already exists for event \"{self.name}\" ({scheduled_event.id}). Removed the event from pending set."
+            )
             return
 
-        logging.info(f"Scheduling reminder for \"{self.name}\" in {delay} seconds.")
-        asyncio.create_task(self._delayed_reminder(delay, scheduled_event))
+        # skip if a reminder task is already scheduled for this event
+        if scheduled_event.id in self._pending_reminder_event_ids:
+            return
+
+        # reminder not scheduled but the post time has already passed, so send the
+        # reminder now to catch up
+        if now >= reminder_datetime:
+            logging.info(
+                f"Reminder time has passed for \"{self.name}\" ({scheduled_event.id}); sending catch-up reminder now."
+            )
+            await self._send_reminder(scheduled_event)
+            return
+
+        # otherwise, schedule the reminder for the future
+        self._schedule_reminder(event_datetime, scheduled_event)
     
-    async def post_next_event(self):
+    async def post_next_event_and_schedule_reminder(self):
         """
         Post the next event unless its date is excluded. Then schedule a reminder
         to be sent before the event starts.
 
         NOTE: we don't schedule the posting of the next recurrence here intentionally.
-        It's easier for schedule next events based on the presence of events (e.g., so
+        It's easier to schedule next events based on the presence of events (e.g., so
         we don't post a new one every restart)
 
-        On the other hand, we can't easily check the presence of a reminder message by polling,
-        so we schedule one to be send. However, we lose the scheduled reminder if the bot
-        restarts after posting the event... welp.
+        Reminders are reconciled against Discord state (scheduled event + message history)
+        so restart does not lose them.
         """
         
         next_event_date = self.get_next_event_date()
@@ -114,6 +173,6 @@ class RecurringSameDayEvent():
             entity_type = discord.EntityType.external,
             privacy_level = discord.PrivacyLevel.guild_only,
             location = self.location)
-        
-        # Schedule the reminder
-        self._schedule_reminder(start_datetime, scheduled_event)
+
+        # Schedule reminder and let regular reconciliation keep things correct after restarts.
+        await self.reconcile_event_reminder([scheduled_event])
