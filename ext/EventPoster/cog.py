@@ -13,6 +13,7 @@ ANNOUNCEMENTS_CHANNEL_ID = int(assert_getenv("announcements_channel_id"))
 
 excluded_dates = {
     # datetime.date(2025, 9, 6)  # QCR local tournament 2025
+    datetime.date(2026, 7, 11)  # Anime Ohio
 }
 
 events = [
