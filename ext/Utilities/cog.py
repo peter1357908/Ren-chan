@@ -8,6 +8,7 @@ from typing import *
 
 from .config import *
 from .helpers import *
+from .lobby import LobbyView
 
 
 class Utilities(commands.Cog):
@@ -16,6 +17,14 @@ class Utilities(commands.Cog):
     """
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    @app_commands.command(name="lobby", description="Create a lobby for assigning players to tables.")
+    @app_commands.describe(name="The name of the lobby.")
+    async def lobby(self, interaction: Interaction, name: app_commands.Range[str, 1, 100] = "Leaderboard Games"):
+        view = LobbyView(name, OFFICER_ROLE, BOT_MAINTAINER_ID)
+        await interaction.response.send_message(
+            view.roster(), view=view, allowed_mentions=discord.AllowedMentions.none()
+        )
 
     # ===================================================
     # REGISTRATION LOGIC

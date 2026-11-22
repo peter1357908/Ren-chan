@@ -1,0 +1,138 @@
+import asyncio
+import logging
+
+import discord
+
+from .lobby_assignments import assign_tables
+
+
+SEATS = ("East", "South", "West", "North")
+MESSAGE_LIMIT = 2000  # set to the Discord message content limit
+# See: https://docs.discord.com/developers/resources/message#create-message
+
+
+class LobbyView(discord.ui.View):
+    def __init__(self, name: str, officer_role: str, maintainer_id: int):
+        super().__init__(timeout=None)
+        self.name = discord.utils.escape_mentions(name)
+        self.officer_role = officer_role
+        self.maintainer_id = maintainer_id
+        self.player_ids: list[int] = []
+        self.closed = False
+        self.lock = asyncio.Lock()
+
+    def roster(self) -> str:
+        status = " (closed)" if self.closed else ""
+        players = "\n".join(f"<@{player_id}>" for player_id in self.player_ids)
+        return f"**Lobby: {self.name}**{status}\n{players or 'No players yet.'}"
+
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item
+    ) -> None:
+        logging.error("Lobby interaction failed", exc_info=(type(error), error, error.__traceback__))
+        if self.closed:
+            message = f"The lobby is closed, but the table announcement may be incomplete. Please contact <@{self.maintainer_id}>."
+        else:
+            message = f"An error occurred while updating the lobby. Please contact an officer or <@{self.maintainer_id}>."
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+
+    @discord.ui.button(label="Join", style=discord.ButtonStyle.success)
+    async def join(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        async with self.lock:
+            if self.closed:
+                await interaction.followup.send("This lobby is closed.", ephemeral=True)
+            elif interaction.user.id in self.player_ids:
+                await interaction.followup.send("You are already in this lobby.", ephemeral=True)
+            else:
+                self.player_ids.append(interaction.user.id)
+                # Leave room for the closed marker when the lobby is assigned.
+                if len(self.roster()) + len(" (closed)") > MESSAGE_LIMIT:
+                    self.player_ids.pop()
+                    await interaction.followup.send("This lobby is full; its roster cannot fit in a Discord message.", ephemeral=True)
+                    return
+                updated = False
+                try:
+                    await interaction.message.edit(content=self.roster(), view=self, allowed_mentions=discord.AllowedMentions.none())
+                    updated = True
+                finally:
+                    if not updated:
+                        self.player_ids.pop()
+
+    @discord.ui.button(label="Leave", style=discord.ButtonStyle.secondary)
+    async def leave(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        async with self.lock:
+            if self.closed:
+                await interaction.followup.send("This lobby is closed.", ephemeral=True)
+            elif interaction.user.id not in self.player_ids:
+                await interaction.followup.send("You are not in this lobby.", ephemeral=True)
+            else:
+                index = self.player_ids.index(interaction.user.id)
+                self.player_ids.pop(index)
+                updated = False
+                try:
+                    await interaction.message.edit(content=self.roster(), view=self, allowed_mentions=discord.AllowedMentions.none())
+                    updated = True
+                finally:
+                    if not updated:
+                        self.player_ids.insert(index, interaction.user.id)
+
+    @discord.ui.button(label="Assign Tables", style=discord.ButtonStyle.primary)
+    async def assign(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        async with self.lock:
+            if self.closed:
+                await interaction.followup.send("This lobby is closed.", ephemeral=True)
+                return
+            if not isinstance(interaction.user, discord.Member) or not any(
+                role.name == self.officer_role for role in interaction.user.roles
+            ):
+                await interaction.followup.send(
+                    f"You need the {discord.utils.escape_mentions(self.officer_role)} role to assign tables.",
+                    ephemeral=True,
+                )
+                return
+            if len(self.player_ids) < 3:
+                await interaction.followup.send("At least three players are required to assign tables.", ephemeral=True)
+                return
+
+            tables, sitting_out = assign_tables(self.player_ids)
+            self.closed = True
+            for child in self.children:
+                child.disabled = True
+            updated = False
+            try:
+                await interaction.message.edit(content=self.roster(), view=self, allowed_mentions=discord.AllowedMentions.none())
+                updated = True
+            finally:
+                if not updated:
+                    self.closed = False
+                    for child in self.children:
+                        child.disabled = False
+            self.stop()
+
+            sections = [
+                f"**Table {number}**\n" + "\n".join(
+                    f"{seat}: <@{player_id}>" for seat, player_id in zip(SEATS, table)
+                )
+                for number, table in enumerate(tables, start=1)
+            ]
+            if sitting_out:
+                sections.append(f"**Sitting out:** <@{sitting_out[0]}>")
+
+            messages = [f"**Table assignments: {self.name}**"]
+            for section in sections:
+                if len(messages[-1]) + len(section) + 2 > MESSAGE_LIMIT:
+                    messages.append(section)
+                else:
+                    messages[-1] += f"\n\n{section}"
+
+            for message in messages:
+                await interaction.followup.send(
+                    message,
+                    allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
+                )

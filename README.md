@@ -63,6 +63,13 @@ This repo does contain a GitHub Actions workflow that automates deployment to a 
     - `SERVER_SSH_KEY`: the content of `~/.ssh/github_deploy_key`
     - `SERVER_USER`: the same username as you configured earlier
 
+#### Using continuous deployment
+1. Commit and push changes to `main`, or merge them into `main`. The [deployment workflow](./.github/workflows/deploy.yml) runs automatically, except when only the root `README.md` changes.
+1. Check the GitHub Actions run for success. The workflow runs [`deploy.sh`](./deploy/deploy.sh) on the server, which pulls the server checkout's configured branch, installs dependencies, and restarts the service.
+1. If slash commands were added or their inputs or outputs changed, the bot owner must send the regular Discord command `rc/sync` after deployment.
+
+The regular command `rc/restart` restarts the bot but does not pull changes; see [bot.py](./bot.py) for the admin commands.
+
 ## Running the bot
 1. ensure you complete all steps in [the setup](#setting-up-the-bot).
 1. run `./deploy/deploy.sh` (see [repo structure](#repository-structure) for a breakdown of `deploy.sh`).

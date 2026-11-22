@@ -5,3 +5,4 @@ gs_service_account.json
 # generated local files
 **/__pycache__
 bot.pid
+.vscode/
