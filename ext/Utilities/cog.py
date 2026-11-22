@@ -21,7 +21,7 @@ class Utilities(commands.Cog):
     @app_commands.command(name="lobby", description="Create a lobby for assigning players to tables.")
     @app_commands.describe(name="The name of the lobby.")
     async def lobby(self, interaction: Interaction, name: app_commands.Range[str, 1, 100] = "Leaderboard Games"):
-        view = LobbyView(name, OFFICER_ROLE, BOT_MAINTAINER_ID)
+        view = LobbyView(name, OFFICER_ROLE, BOT_MAINTAINER_ID, interaction.user.id)
         await interaction.response.send_message(
             view.roster(), view=view, allowed_mentions=discord.AllowedMentions.none()
         )

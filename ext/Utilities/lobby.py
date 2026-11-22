@@ -12,11 +12,12 @@ MESSAGE_LIMIT = 2000  # set to the Discord message content limit
 
 
 class LobbyView(discord.ui.View):
-    def __init__(self, name: str, officer_role: str, maintainer_id: int):
-        super().__init__(timeout=None)
+    def __init__(self, name: str, officer_role: str, maintainer_id: int, creator_id: int):
+        super().__init__(timeout=3600)
         self.name = discord.utils.escape_mentions(name)
         self.officer_role = officer_role
         self.maintainer_id = maintainer_id
+        self.creator_id = creator_id
         self.player_ids: list[int] = []
         self.closed = False
         self.lock = asyncio.Lock()
@@ -25,6 +26,29 @@ class LobbyView(discord.ui.View):
         status = " (closed)" if self.closed else ""
         players = "\n".join(f"<@{player_id}>" for player_id in self.player_ids)
         return f"**Lobby: {self.name}**{status}\n{players or 'No players yet.'}"
+
+    def can_manage(self, user: discord.User | discord.Member) -> bool:
+        return user.id == self.creator_id or (
+            isinstance(user, discord.Member)
+            and any(role.name == self.officer_role for role in user.roles)
+        )
+
+    async def close_lobby(self, interaction: discord.Interaction) -> None:
+        if interaction.message is None:
+            raise RuntimeError("Lobby interaction has no message.")
+        self.closed = True
+        for child in self.children:
+            child.disabled = True
+        updated = False
+        try:
+            await interaction.message.edit(content=self.roster(), view=self, allowed_mentions=discord.AllowedMentions.none())
+            updated = True
+        finally:
+            if not updated:
+                self.closed = False
+                for child in self.children:
+                    child.disabled = False
+        self.stop()
 
     async def on_error(
         self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item
@@ -49,7 +73,7 @@ class LobbyView(discord.ui.View):
                 await interaction.followup.send("You are already in this lobby.", ephemeral=True)
             else:
                 self.player_ids.append(interaction.user.id)
-                # Leave room for the closed marker when the lobby is assigned.
+                # Leave room for the closed marker.
                 if len(self.roster()) + len(" (closed)") > MESSAGE_LIMIT:
                     self.player_ids.pop()
                     await interaction.followup.send("This lobby is full; its roster cannot fit in a Discord message.", ephemeral=True)
@@ -88,11 +112,9 @@ class LobbyView(discord.ui.View):
             if self.closed:
                 await interaction.followup.send("This lobby is closed.", ephemeral=True)
                 return
-            if not isinstance(interaction.user, discord.Member) or not any(
-                role.name == self.officer_role for role in interaction.user.roles
-            ):
+            if not self.can_manage(interaction.user):
                 await interaction.followup.send(
-                    f"You need the {discord.utils.escape_mentions(self.officer_role)} role to assign tables.",
+                    "Only the lobby creator or an officer can assign tables.",
                     ephemeral=True,
                 )
                 return
@@ -101,19 +123,7 @@ class LobbyView(discord.ui.View):
                 return
 
             tables, sitting_out = assign_tables(self.player_ids)
-            self.closed = True
-            for child in self.children:
-                child.disabled = True
-            updated = False
-            try:
-                await interaction.message.edit(content=self.roster(), view=self, allowed_mentions=discord.AllowedMentions.none())
-                updated = True
-            finally:
-                if not updated:
-                    self.closed = False
-                    for child in self.children:
-                        child.disabled = False
-            self.stop()
+            await self.close_lobby(interaction)
 
             sections = [
                 f"**Table {number}**\n" + "\n".join(
@@ -136,3 +146,14 @@ class LobbyView(discord.ui.View):
                     message,
                     allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
                 )
+
+    @discord.ui.button(label="Close Lobby", style=discord.ButtonStyle.danger)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        async with self.lock:
+            if self.closed:
+                await interaction.followup.send("This lobby is closed.", ephemeral=True)
+            elif not self.can_manage(interaction.user):
+                await interaction.followup.send("Only the lobby creator or an officer can close this lobby.", ephemeral=True)
+            else:
+                await self.close_lobby(interaction)

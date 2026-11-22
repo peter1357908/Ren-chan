@@ -22,7 +22,7 @@ def interaction(user_id: int, officer: bool = False):
 
 class LobbyViewTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.view = LobbyView("Leaderboard Games", "Officer", 123)
+        self.view = LobbyView("Leaderboard Games", "Officer", 123, creator_id=42)
 
     async def test_join_leave_and_duplicate_actions(self):
         first = interaction(1)
@@ -43,11 +43,11 @@ class LobbyViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.view.player_ids, [])
         self.assertIn("No players yet.", first.message.edit.await_args.kwargs["content"])
 
-    async def test_only_officer_can_assign_and_at_least_three_are_required(self):
+    async def test_only_creator_or_officer_can_assign_and_at_least_three_are_required(self):
         self.view.player_ids = [1, 2, 3]
         non_officer = interaction(1)
         await self.view.assign.callback(non_officer)
-        self.assertIn("Officer", non_officer.followup.send.await_args.args[0])
+        self.assertIn("creator or an officer", non_officer.followup.send.await_args.args[0])
         self.assertTrue(non_officer.followup.send.await_args.kwargs["ephemeral"])
         self.assertFalse(self.view.closed)
 
@@ -59,8 +59,15 @@ class LobbyViewTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertFalse(self.view.closed)
 
+    async def test_creator_can_assign_without_officer_role(self):
+        self.view.player_ids = [1, 2, 3]
+        creator = interaction(42)
+        await self.view.assign.callback(creator)
+        self.assertTrue(self.view.closed)
+        self.assertIn("**Table 1**", creator.followup.send.await_args.args[0])
+
     async def test_lobbies_have_independent_rosters_and_closing(self):
-        other = LobbyView("Leaderboard Games", "Officer", 123)
+        other = LobbyView("Leaderboard Games", "Officer", 123, creator_id=42)
         await asyncio.gather(
             self.view.join.callback(interaction(1)),
             other.join.callback(interaction(1)),
@@ -93,6 +100,22 @@ class LobbyViewTests(unittest.IsolatedAsyncioTestCase):
         await self.view.join.callback(late_join)
         late_join.followup.send.assert_awaited_once_with("This lobby is closed.", ephemeral=True)
 
+    async def test_creator_or_officer_can_close_without_assigning(self):
+        unauthorized = interaction(1)
+        await self.view.close.callback(unauthorized)
+        self.assertFalse(self.view.closed)
+        self.assertTrue(unauthorized.followup.send.await_args.kwargs["ephemeral"])
+
+        for user_id, officer in ((42, False), (10, True)):
+            with self.subTest(user_id=user_id):
+                view = LobbyView("Games", "Officer", 123, creator_id=42)
+                user_interaction = interaction(user_id, officer=officer)
+                await view.close.callback(user_interaction)
+                self.assertTrue(view.closed)
+                self.assertTrue(all(child.disabled for child in view.children))
+                self.assertIn("(closed)", user_interaction.message.edit.await_args.kwargs["content"])
+                user_interaction.followup.send.assert_not_awaited()
+
     async def test_concurrent_duplicate_joins_only_add_once(self):
         first, second = interaction(1), interaction(1)
         await asyncio.gather(self.view.join.callback(first), self.view.join.callback(second))
@@ -120,6 +143,13 @@ class LobbyViewTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.view.closed)
         self.assertTrue(all(not child.disabled for child in self.view.children))
         officer.followup.send.assert_not_awaited()
+
+        creator = interaction(42)
+        creator.message.edit.side_effect = RuntimeError("edit failed")
+        with self.assertRaises(RuntimeError):
+            await self.view.close.callback(creator)
+        self.assertFalse(self.view.closed)
+        self.assertTrue(all(not child.disabled for child in self.view.children))
 
     async def test_concurrent_assignments_publish_only_once(self):
         self.view.player_ids = [1, 2, 3]
