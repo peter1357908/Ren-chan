@@ -9,7 +9,10 @@ interactions to [lobby.py](./lobby.py) and table assignment to
 Use `/lobby` to create a lobby, optionally specifying a name (default:
 `Leaderboard Games`). `Join` and `Leave` update the shared roster; if an action
 does not apply to you, the bot replies privately. The lobby creator or an
-officer can use `Add Others` to select and add another user, or use `Assign Tables` to close the lobby and announce randomized tables
+officer can use `Add Others` to add another user or `Remove Others` to remove
+a player. Both menus show server users; removing someone not in the lobby is
+rejected. The roster labels the menus in their displayed order. The creator or
+an officer can also use `Assign Tables` to close the lobby and announce randomized tables
 and seats, mentioning the players. Three-player tables use East, South, and
 West; four-player tables also use North.
 

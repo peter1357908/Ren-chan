@@ -25,7 +25,10 @@ class LobbyView(discord.ui.View):
     def roster(self) -> str:
         status = " (closed)" if self.closed else ""
         players = "\n".join(f"<@{player_id}>" for player_id in self.player_ids)
-        return f"**Lobby: {self.name}**{status}\n{players or 'No players yet.'}"
+        return (
+            f"**Lobby: {self.name}**{status}\n{players or 'No players yet.'}"
+            "\n\n**Menus:** top = Add Others; bottom = Remove Others"
+        )
 
     def can_manage(self, user: discord.User | discord.Member) -> bool:
         return user.id == self.creator_id or (
@@ -85,6 +88,17 @@ class LobbyView(discord.ui.View):
             if not updated:
                 self.player_ids.pop()
 
+    async def remove_player(self, interaction: discord.Interaction, player_id: int) -> None:
+        index = self.player_ids.index(player_id)
+        self.player_ids.pop(index)
+        updated = False
+        try:
+            await self.update_roster_message(interaction)
+            updated = True
+        finally:
+            if not updated:
+                self.player_ids.insert(index, player_id)
+
     @discord.ui.button(label="Join", style=discord.ButtonStyle.success)
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
@@ -96,7 +110,7 @@ class LobbyView(discord.ui.View):
             else:
                 await self.add_player(interaction, interaction.user.id)
 
-    @discord.ui.select(cls=discord.ui.UserSelect, placeholder="Add Others")
+    @discord.ui.select(cls=discord.ui.UserSelect, placeholder="Add Others", row=1)
     async def add_others(self, interaction: discord.Interaction, select: discord.ui.UserSelect) -> None:
         await interaction.response.defer()
         async with self.lock:
@@ -109,6 +123,19 @@ class LobbyView(discord.ui.View):
             else:
                 await self.add_player(interaction, select.values[0].id)
 
+    @discord.ui.select(cls=discord.ui.UserSelect, placeholder="Remove Others", row=2)
+    async def remove_others(self, interaction: discord.Interaction, select: discord.ui.UserSelect) -> None:
+        await interaction.response.defer()
+        async with self.lock:
+            if self.closed:
+                await interaction.followup.send("This lobby is closed.", ephemeral=True)
+            elif not self.can_manage(interaction.user):
+                await interaction.followup.send("Only the lobby creator or an officer can remove others.", ephemeral=True)
+            elif select.values[0].id not in self.player_ids:
+                await interaction.followup.send("That user is not in this lobby.", ephemeral=True)
+            else:
+                await self.remove_player(interaction, select.values[0].id)
+
     @discord.ui.button(label="Leave", style=discord.ButtonStyle.secondary)
     async def leave(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
@@ -118,15 +145,7 @@ class LobbyView(discord.ui.View):
             elif interaction.user.id not in self.player_ids:
                 await interaction.followup.send("You are not in this lobby.", ephemeral=True)
             else:
-                index = self.player_ids.index(interaction.user.id)
-                self.player_ids.pop(index)
-                updated = False
-                try:
-                    await self.update_roster_message(interaction)
-                    updated = True
-                finally:
-                    if not updated:
-                        self.player_ids.insert(index, interaction.user.id)
+                await self.remove_player(interaction, interaction.user.id)
 
     @discord.ui.button(label="Assign Tables", style=discord.ButtonStyle.primary)
     async def assign(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:

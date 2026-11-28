@@ -87,6 +87,50 @@ class LobbyViewTests(unittest.IsolatedAsyncioTestCase):
                 await self.view.add_others.callback(creator)
             self.assertEqual(self.view.player_ids, [1])
 
+    async def test_remove_others_permissions_and_roster(self):
+        self.view.player_ids = [5, 6, 7]
+        with patch.object(discord.ui.UserSelect, "values", new_callable=PropertyMock) as values:
+            values.return_value = [SimpleNamespace(id=5)]
+            unauthorized = interaction(1)
+            await self.view.remove_others.callback(unauthorized)
+            self.assertEqual(self.view.player_ids, [5, 6, 7])
+            self.assertTrue(unauthorized.followup.send.await_args.kwargs["ephemeral"])
+
+            creator = interaction(42)
+            await self.view.remove_others.callback(creator)
+            self.assertEqual(self.view.player_ids, [6, 7])
+            self.assertNotIn("<@5>", creator.message.edit.await_args.kwargs["content"])
+            self.assertFalse(creator.message.edit.await_args.kwargs["allowed_mentions"].users)
+
+            officer = interaction(10, officer=True)
+            await self.view.remove_others.callback(officer)
+            self.assertIn("not in this lobby", officer.followup.send.await_args.args[0])
+            values.return_value = [SimpleNamespace(id=6)]
+            await self.view.remove_others.callback(officer)
+            self.assertEqual(self.view.player_ids, [7])
+
+            self.view.closed = True
+            values.return_value = [SimpleNamespace(id=7)]
+            await self.view.remove_others.callback(creator)
+            self.assertEqual(self.view.player_ids, [7])
+            self.assertIn("closed", creator.followup.send.await_args.args[0])
+
+    async def test_remove_others_restores_roster_on_edit_failure(self):
+        self.view.player_ids = [1, 2, 3]
+        creator = interaction(42)
+        creator.message.edit.side_effect = RuntimeError("edit failed")
+        with patch.object(discord.ui.UserSelect, "values", new_callable=PropertyMock) as values:
+            values.return_value = [SimpleNamespace(id=2)]
+            with self.assertRaises(RuntimeError):
+                await self.view.remove_others.callback(creator)
+        self.assertEqual(self.view.player_ids, [1, 2, 3])
+
+    async def test_menu_labels_match_component_order(self):
+        components = self.view.to_components()
+        self.assertIn("top = Add Others; bottom = Remove Others", self.view.roster())
+        self.assertEqual(components[1]["components"][0]["placeholder"], "Add Others")
+        self.assertEqual(components[2]["components"][0]["placeholder"], "Remove Others")
+
     async def test_only_creator_or_officer_can_assign_and_at_least_three_are_required(self):
         self.view.player_ids = [1, 2, 3]
         non_officer = interaction(1)
