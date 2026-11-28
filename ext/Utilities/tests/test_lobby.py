@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import discord
 
@@ -42,6 +42,50 @@ class LobbyViewTests(unittest.IsolatedAsyncioTestCase):
         await self.view.leave.callback(first)
         self.assertEqual(self.view.player_ids, [])
         self.assertIn("No players yet.", first.message.edit.await_args.kwargs["content"])
+
+    async def test_add_others_permissions_and_duplicates(self):
+        with patch.object(discord.ui.UserSelect, "values", new_callable=PropertyMock) as values:
+            values.return_value = [SimpleNamespace(id=5)]
+            unauthorized = interaction(1)
+            await self.view.add_others.callback(unauthorized)
+            self.assertEqual(self.view.player_ids, [])
+            self.assertTrue(unauthorized.followup.send.await_args.kwargs["ephemeral"])
+
+            creator = interaction(42)
+            await self.view.add_others.callback(creator)
+            self.assertEqual(self.view.player_ids, [5])
+            self.assertIn("<@5>", creator.message.edit.await_args.kwargs["content"])
+            self.assertFalse(creator.message.edit.await_args.kwargs["allowed_mentions"].users)
+
+            officer = interaction(10, officer=True)
+            await self.view.add_others.callback(officer)
+            self.assertEqual(self.view.player_ids, [5])
+            self.assertIn("already in this lobby", officer.followup.send.await_args.args[0])
+
+            values.return_value = [SimpleNamespace(id=6)]
+            await self.view.add_others.callback(officer)
+            self.assertEqual(self.view.player_ids, [5, 6])
+
+            self.view.closed = True
+            await self.view.add_others.callback(creator)
+            self.assertEqual(self.view.player_ids, [5, 6])
+            self.assertIn("closed", creator.followup.send.await_args.args[0])
+
+    async def test_add_others_rejects_full_lobby_and_restores_state_on_edit_failure(self):
+        with patch.object(discord.ui.UserSelect, "values", new_callable=PropertyMock) as values:
+            values.return_value = [SimpleNamespace(id=5)]
+            self.view.player_ids = list(range(10**18, 10**18 + 100))
+            creator = interaction(42)
+            await self.view.add_others.callback(creator)
+            self.assertNotIn(5, self.view.player_ids)
+            self.assertIn("lobby is full", creator.followup.send.await_args.args[0])
+            creator.message.edit.assert_not_awaited()
+
+            self.view.player_ids = [1]
+            creator.message.edit.side_effect = RuntimeError("edit failed")
+            with self.assertRaises(RuntimeError):
+                await self.view.add_others.callback(creator)
+            self.assertEqual(self.view.player_ids, [1])
 
     async def test_only_creator_or_officer_can_assign_and_at_least_three_are_required(self):
         self.view.player_ids = [1, 2, 3]

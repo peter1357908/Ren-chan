@@ -7,9 +7,9 @@ interactions to [lobby.py](./lobby.py) and table assignment to
 ## Lobby
 
 Use `/lobby` to create a lobby, optionally specifying a name (default:
-`Leaderboard Games`). Join and Leave update the shared roster; if an action
+`Leaderboard Games`). `Join` and `Leave` update the shared roster; if an action
 does not apply to you, the bot replies privately. The lobby creator or an
-officer can use Assign Tables to close the lobby and announce randomized tables
+officer can use `Add Others` to select and add another user, or use `Assign Tables` to close the lobby and announce randomized tables
 and seats, mentioning the players. Three-player tables use East, South, and
 West; four-player tables also use North.
 
